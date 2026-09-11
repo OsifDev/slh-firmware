@@ -454,7 +454,7 @@ void setupServer() {
         };
         if (to.length() == 0) {
             String r = "{\"current\":\"" + nameOf(g_currentScreen)
-                     + "\",\"all\":[\"prices\",\"market\",\"setup\",\"show\",\"lesson\"]}";
+                     + "\",\"all\":[\"home\",\"prices\",\"market\",\"setup\",\"show\",\"lesson\"]}";
             server.send(200, "application/json", r);
             return;
         }
@@ -938,7 +938,7 @@ void loop() {
         if (g_saverActive) {
             if (millis() - g_saverLastFlip >= SAVER_CYCLE_MS) {
                 g_saverLastFlip = millis();
-                nextScreen();
+                // nextScreen disabled in saver mode - dim only
             }
             if (g_currentScreen == SCR_SHOW) updateShowScreen();
             delay(30);

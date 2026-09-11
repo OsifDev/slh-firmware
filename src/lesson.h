@@ -1,9 +1,15 @@
 #pragma once
 #include "lesson_bitmaps.h"
 
+// forward decl - definition is in navbar.h
+void drawNavBar(int pressed);
+
 static int           g_lessonPage     = 0;
 static unsigned long g_lessonLastFlip = 0;
 static const unsigned long LESSON_FLIP_MS = 12000UL;
+
+// Auto-flip between lesson pages. Set to 1 to enable, 0 to freeze.
+#define LESSON_AUTOPLAY 0
 
 static inline uint16_t rgb332_to_565(uint8_t px) {
     uint16_t r = (px >> 5) & 0x07;
@@ -37,7 +43,8 @@ void drawLessonPage(int n) {
             }
         }
     }
-
+    // Navbar always on top of the lesson image
+    drawNavBar(-1);
 }
 
 void drawLessonScreen() {
@@ -46,9 +53,12 @@ void drawLessonScreen() {
 }
 
 void updateLessonScreen() {
+    if (g_currentScreen != SCR_LESSON) return;
+#if LESSON_AUTOPLAY
     if (millis() - g_lessonLastFlip >= LESSON_FLIP_MS) {
         g_lessonPage = (g_lessonPage + 1) % (int)LESSON_COUNT;
         drawLessonPage(g_lessonPage);
         g_lessonLastFlip = millis();
     }
+#endif
 }

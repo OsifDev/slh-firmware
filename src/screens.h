@@ -89,7 +89,7 @@ void drawMarketScreen() {
     }
     tft.setTextColor(C_DIM, C_BG);
     tft.drawString("range = (high-low)/low  |  marker = price position", 12, 198, 1);
-    drawTapHint();
+    // drawTapHint removed - navbar replaces it
 }
 void drawSetupScreen() {
     tft.fillScreen(C_BG);
@@ -147,7 +147,7 @@ void drawSetupScreen() {
     }
     tft.setTextColor(C_DIM, C_BG);
     tft.drawString(ctx, 12, y, 1);
-    drawTapHint();
+    // drawTapHint removed - navbar replaces it
 }
 // =====================================================================
 //  SHOW SCREEN ? animated showcase of the SLH logo + device vitals
