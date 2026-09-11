@@ -37,11 +37,7 @@ void drawLessonPage(int n) {
             }
         }
     }
-    tft.fillRect(0, 200, 320, 40, C_BG);
-    tft.setTextDatum(MC_DATUM);
-    tft.setTextColor(C_DIM, C_BG);
-    tft.drawString("touch = next screen", 160, 220, 2);
-    tft.setTextDatum(TL_DATUM);
+
 }
 
 void drawLessonScreen() {
