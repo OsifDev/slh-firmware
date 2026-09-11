@@ -42,6 +42,9 @@ static const unsigned long SAVER_IDLE_MS  = 90000UL;
 static const unsigned long SAVER_CYCLE_MS = 20000UL;
 
 static bool          g_touchWasDown  = false;
+static uint16_t      g_lastTx      = 0;
+static uint16_t      g_lastTy      = 0;
+static unsigned long g_lastTxMs    = 0;
 static unsigned long g_lastTouchMs   = 0;
 static const unsigned long TOUCH_COOLDOWN_MS = 350UL;
 
@@ -512,6 +515,16 @@ void setupServer() {
         r += ",\"cal\":[" + String(rtCal[0]) + "," + String(rtCal[1]) + "," + String(rtCal[2]) + "," + String(rtCal[3]) + "]}";
         server.send(200, "application/json", r);
     });
+    server.on("/lasttouch", [](){
+        unsigned long age = (g_lastTxMs == 0) ? 999999UL : (millis() - g_lastTxMs);
+        String r = "{\"x\":" + String(g_lastTx);
+        r += ",\"y\":" + String(g_lastTy);
+        r += ",\"age_ms\":" + String(age);
+        r += ",\"on_navbar\":" + String((g_lastTy >= 196) ? "true" : "false");
+        r += "}";
+        server.send(200, "application/json", r);
+    });
+
     server.on("/touchtest", [](){
         String r = "{\"detects\":[";
         bool first = true;
@@ -944,6 +957,7 @@ void loop() {
     {
         uint16_t tx, ty;
         bool touchDown = rtTouch(&tx, &ty);
+        if (touchDown) { g_lastTx = tx; g_lastTy = ty; g_lastTxMs = millis(); }
         bool touchEdge = touchDown && !g_touchWasDown;
         g_touchWasDown = touchDown;
 
