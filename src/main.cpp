@@ -182,8 +182,8 @@ void drawFrame() {
 }
 
 void drawRow(int index, const Coin& c) {
-    const int top = 42 + index * 43;
-    const int h   = 39;
+    const int top = 38 + index * 39;
+    const int h   = 35;
     tft.fillRoundRect(6, top, 308, h, 4, C_PANEL);
     uint16_t stripe = (strcmp(c.symbol, "SLH") == 0) ? C_GOLD : C_ACCENT;
     tft.fillRect(6, top, 3, h, stripe);
@@ -228,6 +228,7 @@ void drawAll() {
 }
 
 #include "screens.h"
+#include "navbar.h"
 #include "poll.h"
 
 bool fetchCoinGecko() {
@@ -579,6 +580,35 @@ void setupServer() {
         v += "}";
         server.send(200, "application/json", v);
     });
+    server.on("/layout", [](){
+        String r = "{\"screen\":" + String((int)g_currentScreen);
+        r += ",\"regions\":[";
+        r += "{\"n\":\"header\",\"y\":0,\"h\":34}";
+        if (g_currentScreen == SCR_HOME) {
+            r += ",{\"n\":\"grid_row1\",\"y\":42,\"h\":84}";
+            r += ",{\"n\":\"grid_row2\",\"y\":130,\"h\":84}";
+            r += ",{\"n\":\"tabbar\",\"y\":216,\"h\":24}";
+        } else {
+            r += ",{\"n\":\"content\",\"y\":36,\"h\":" + String(NAV_TOP - 36) + "}";
+            r += ",{\"n\":\"navbar\",\"y\":" + String(NAV_TOP) + ",\"h\":" + String(NAV_H) + "}";
+        }
+        r += "],\"overlaps\":[";
+        bool first = true;
+        if (g_currentScreen == SCR_HOME && 130 + 84 > 216) {
+            r += "{\"a\":\"grid_row2\",\"b\":\"tabbar\"}"; first = false;
+        }
+        if (g_currentScreen == SCR_MARKET) {
+            int need = 36 + COIN_COUNT * 40;
+            if (need > NAV_TOP) {
+                if (!first) r += ",";
+                r += "{\"a\":\"market_rows\",\"b\":\"navbar\",\"by\":" + String(need - NAV_TOP) + "}";
+                first = false;
+            }
+        }
+        r += "],\"nav_top\":" + String(NAV_TOP);
+        r += ",\"screen_h\":240}";
+        server.send(200, "application/json", r);
+    });
     server.on("/setcal", [](){
         if (server.hasArg("x0")) rtCal[0] = server.arg("x0").toInt();
         if (server.hasArg("x1")) rtCal[1] = server.arg("x1").toInt();
@@ -869,11 +899,24 @@ void loop() {
             g_saverActive = false;
             ledcWrite(0, 255);
 
-            if (tx < 52 && ty < 36) {
-                if (g_currentScreen != SCR_HOME) {
+            int nav = navHit(tx, ty);
+            if (nav >= 0 && g_currentScreen != SCR_HOME) {
+                navFeedback(nav);
+                if (nav == 0) {
+                    ScreenId back = g_prevScreen;
+                    g_prevScreen = g_currentScreen;
+                    g_currentScreen = back;
+                } else if (nav == 1) {
+                    g_prevScreen = g_currentScreen;
                     g_currentScreen = SCR_HOME;
-                    drawCurrentScreen();
+                } else {
+                    g_prevScreen = g_currentScreen;
+                    g_currentScreen = (ScreenId)(((int)g_currentScreen + 1) % (int)SCR_COUNT);
+                    if (g_currentScreen == SCR_HOME) g_currentScreen = SCR_PRICES;
                 }
+                if (g_currentScreen == SCR_PRICES) firstDraw = true;
+                if (g_currentScreen == SCR_LESSON) g_lessonPage = 0;
+                drawCurrentScreen();
             } else if (g_currentScreen == SCR_HOME) {
                 ScreenId tgt = homeTouchHandler(tx, ty);
                 if (tgt < SCR_COUNT && tgt != g_currentScreen) {
@@ -882,8 +925,6 @@ void loop() {
                     if (tgt == SCR_LESSON) g_lessonPage = 0;
                     drawCurrentScreen();
                 }
-            } else {
-                nextScreen();
             }
         }
     }

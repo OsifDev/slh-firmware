@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 enum ScreenId { SCR_PRICES = 0, SCR_MARKET, SCR_SETUP, SCR_SHOW, SCR_LESSON, SCR_HOME, SCR_COUNT };
 ScreenId g_currentScreen = SCR_HOME;
 #define FEE_TAKER_PCT    0.20f
@@ -150,7 +150,7 @@ void drawSetupScreen() {
     drawTapHint();
 }
 // =====================================================================
-//  SHOW SCREEN — animated showcase of the SLH logo + device vitals
+//  SHOW SCREEN ? animated showcase of the SLH logo + device vitals
 // =====================================================================
 static TFT_eSprite* _showSprite     = nullptr;
 static float        _showAngle      = 0.0f;
@@ -280,6 +280,8 @@ void updateShowScreen() {
 #include "lesson.h"
 #include "home_screen.h"
 
+void drawNavBar(int pressed);
+
 void drawCurrentScreen() {
     if (g_currentScreen != SCR_SHOW) showTeardown();
     if (g_currentScreen == SCR_LESSON) g_lessonPage = 0;
@@ -291,6 +293,7 @@ void drawCurrentScreen() {
         case SCR_LESSON: drawLessonScreen(); break;
         case SCR_HOME:   drawHomeScreen();   break;
     }
+    if (g_currentScreen != SCR_HOME) drawNavBar(-1);
 }
 void nextScreen() {
     int _next = ((int)g_currentScreen + 1) % (int)SCR_COUNT; if (_next == SCR_HOME) _next = SCR_PRICES; g_currentScreen = (ScreenId)_next;

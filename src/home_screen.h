@@ -9,12 +9,12 @@ struct HomeApp {
 };
 
 static HomeApp HOME_APPS[6] = {
-    { SCR_PRICES, "PRICES", 0x07FF,   5,  42, 100, 84 },
-    { SCR_SETUP,  "SETUP",  0xFEA0, 110,  42, 100, 84 },
-    { SCR_SHOW,   "SHOW",   0xF81F, 215,  42, 100, 84 },
-    { SCR_LESSON, "LESSON", 0x07E0,   5, 130, 100, 84 },
-    { SCR_MARKET, "MARKET", 0xFD20, 110, 130, 100, 84 },
-    { SCR_COUNT,  "WALLET", 0x7BEF, 215, 130, 100, 84 },
+    { SCR_PRICES, "PRICES", 0x07FF,   5,  40, 100, 74 },
+    { SCR_SETUP,  "SETUP",  0xFEA0, 110,  40, 100, 74 },
+    { SCR_SHOW,   "SHOW",   0xF81F, 215,  40, 100, 74 },
+    { SCR_LESSON, "LESSON", 0x07E0,   5, 120, 100, 74 },
+    { SCR_MARKET, "MARKET", 0xFD20, 110, 120, 100, 74 },
+    { SCR_COUNT,  "WALLET", 0x7BEF, 215, 120, 100, 74 },
 };
 
 void drawHomeIcon(int type, int cx, int cy, uint16_t col) {
@@ -93,7 +93,7 @@ void drawHomeScreen() {
         tft.fillRoundRect(a.x, a.y, a.w, a.h, 6, C_PANEL);
         tft.drawRoundRect(a.x, a.y, a.w, a.h, 6, a.color);
         int cx = a.x + a.w / 2;
-        int cy = a.y + 34;
+        int cy = a.y + 28;
         drawHomeIcon(i, cx, cy, a.color);
         tft.setTextDatum(MC_DATUM);
         tft.setTextColor(a.color, C_PANEL);
