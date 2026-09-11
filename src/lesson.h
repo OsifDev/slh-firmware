@@ -1,25 +1,10 @@
-﻿#pragma once
+#pragma once
 #include "lesson_bitmaps.h"
 
 static int           g_lessonPage     = 0;
 static unsigned long g_lessonLastFlip = 0;
 static const int     LESSON_COUNT     = 4;
 static const unsigned long LESSON_FLIP_MS = 12000UL;
-
-static void drawLessonHeader(int page) {
-    tft.fillRect(0, 0, 320, 34, C_PANEL);
-    tft.drawFastHLine(0, 34, 320, C_ACCENT);
-    drawLogo(20, 17, 13, C_ACCENT);
-    tft.setTextDatum(ML_DATUM);
-    tft.setTextColor(C_ACCENT, C_PANEL);
-    tft.drawString("SLH", 42, 17, 4);
-    tft.setTextColor(C_GOLD, C_PANEL);
-    tft.drawString("LESSON", 98, 17, 2);
-    tft.setTextDatum(MR_DATUM);
-    tft.setTextColor(C_DIM, C_PANEL);
-    tft.drawString(String(page + 1) + "/4", 312, 17, 2);
-    tft.setTextDatum(TL_DATUM);
-}
 
 static inline uint16_t rgb332_to_565(uint8_t px) {
     uint16_t r = (px >> 5) & 0x07;
@@ -33,24 +18,18 @@ static inline uint16_t rgb332_to_565(uint8_t px) {
 
 void drawLessonPage(int n) {
     if (n < 0 || n >= LESSON_COUNT) n = 0;
-    tft.fillScreen(C_BG);
-    
-
     const uint8_t* src = LESSON_PAGES[n];
     static uint16_t rowBuf[320];
-
     for (int y = 0; y < (int)LESSON_H; y++) {
         for (int x = 0; x < (int)LESSON_W; x++) {
-            uint8_t px = pgm_read_byte(&src[y * LESSON_W + x]);
-            rowBuf[x] = rgb332_to_565(px);
+            rowBuf[x] = rgb332_to_565(pgm_read_byte(&src[y * LESSON_W + x]));
         }
         tft.pushImage(0, LESSON_TOP + y, LESSON_W, 1, rowBuf);
     }
-
-    tft.fillRect(0, 222, 320, 18, C_BG);
+    tft.fillRect(0, 200, 320, 40, C_BG);
     tft.setTextDatum(MC_DATUM);
     tft.setTextColor(C_DIM, C_BG);
-    tft.drawString("touch = next screen", 160, 231, 1);
+    tft.drawString("touch = next screen", 160, 220, 2);
     tft.setTextDatum(TL_DATUM);
 }
 
@@ -66,4 +45,3 @@ void updateLessonScreen() {
         g_lessonLastFlip = millis();
     }
 }
-
