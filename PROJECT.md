@@ -118,10 +118,10 @@ It is not a market price and must not be presented as one.
 
 ## Current state
 
-Flash at 89.8% (1,764,853 / 1,966,080). Only 201KB free.
-Cause: lesson_bitmaps.h holds 11 pages x 64,000 bytes uncompressed.
-RLE compression would recover roughly 600KB. Do this before adding
-any new feature - wallet, keyboard, QR all need space.
+Flash at 60.6% (1,191,449 / 1,966,080). 774KB free.
+Lesson bitmaps are RLE compressed: 704KB raw down to 130KB.
+Decoder lives in lesson.h. LESSON_SIZES holds each compressed length.
+Re-run render_lessons.py after editing any lesson text.
 
 Known issues:
   - UI/UX is rough. Built incrementally during debugging.
@@ -143,3 +143,4 @@ background via scheduled task SLH-PriceLogger. Writes prices.csv
 every 60s: timestamp, symbol, price, change, high, low, volume,
 trades. This is the foundation for any future backtesting.
 Build strategy from this data, not the other way around.
+
