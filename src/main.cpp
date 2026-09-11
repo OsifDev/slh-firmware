@@ -182,8 +182,8 @@ void drawFrame() {
 }
 
 void drawRow(int index, const Coin& c) {
-    const int top = 38 + index * 39;
-    const int h   = 35;
+    const int top = 34 + index * 38;
+    const int h   = 34;
     tft.fillRoundRect(6, top, 308, h, 4, C_PANEL);
     uint16_t stripe = (strcmp(c.symbol, "SLH") == 0) ? C_GOLD : C_ACCENT;
     tft.fillRect(6, top, 3, h, stripe);
@@ -223,8 +223,7 @@ void drawAll() {
     if (screenMode == 2) { drawSetup();  return; }
     if (firstDraw) { drawFrame(); firstDraw = false; }
     for (int i = 0; i < COIN_COUNT; i++) drawRow(i, coins[i]);
-    String line = sourceLabel + "  |  " + fmtAge(lastSuccessMs);
-    drawStatus(line, (WiFi.status() == WL_CONNECTED) ? C_DIM : C_DOWN);
+    // drawStatus removed - navbar is the footer now. Age is in /state.
 }
 
 #include "screens.h"
@@ -513,21 +512,76 @@ void setupServer() {
         r += ",\"cal\":[" + String(rtCal[0]) + "," + String(rtCal[1]) + "," + String(rtCal[2]) + "," + String(rtCal[3]) + "]}";
         server.send(200, "application/json", r);
     });
-    server.on("/rawdump", [](){
-        String r = "{\"samples\":[";
-        rtSPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE0));
-        for (int n = 0; n < 10; n++) {
-            uint16_t z = rtRead(0xB1);
+    server.on("/touchtest", [](){
+        String r = "{\"detects\":[";
+        bool first = true;
+        unsigned long t0 = millis();
+        while (millis() - t0 < 15000) {
+            uint16_t sx, sy;
+            if (rtTouch(&sx, &sy)) {
+                if (!first) r += ",";
+                r += "{\"t\":" + String(millis()-t0) + ",\"x\":" + String(sx) + ",\"y\":" + String(sy) + "}";
+                first = false;
+            }
+            delay(50);
+        }
+        r += "]}";
+        server.send(200, "application/json", r);
+    });
+
+    server.on("/waittouch", [](){
+        String r = "{\"events\":[";
+        bool first = true;
+        unsigned long t0 = millis();
+        while (millis() - t0 < 20000) {
+            uint16_t sx, sy;
+            rtSPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE0));
+            rtRead(0xB1);
             rtRead(0x91);
             uint16_t x = rtRead(0x91);
             rtRead(0xD1);
             uint16_t y = rtRead(0xD1);
-            if (n) r += ",";
-            r += "{\"x\":" + String(x) + ",\"y\":" + String(y) + ",\"z\":" + String(z) + "}";
-            delayMicroseconds(300);
+            rtSPI.endTransaction();
+            if (x > 100 && x < 4000 && y > 100 && y < 4000) {
+                if (!first) r += ",";
+                r += "{\"t\":" + String(millis()-t0) + ",\"x\":" + String(x) + ",\"y\":" + String(y) + "}";
+                first = false;
+            }
+            delay(150);
         }
-        rtSPI.endTransaction();
         r += "]}";
+        server.send(200, "application/json", r);
+    });
+
+    server.on("/rawdump", [](){
+        String r = "{\"samples\":[";
+        uint16_t xmin = 4095, xmax = 0, ymin = 4095, ymax = 0;
+        long xsum = 0, ysum = 0;
+        int good = 0;
+        for (int n = 0; n < 60; n++) {
+            rtSPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE0));
+            rtRead(0xB1);
+            rtRead(0x91);
+            uint16_t x = rtRead(0x91);
+            rtRead(0xD1);
+            uint16_t y = rtRead(0xD1);
+            rtSPI.endTransaction();
+            if (n) r += ",";
+            r += "{\"x\":" + String(x) + ",\"y\":" + String(y) + "}";
+            if (x > 100 && x < 4000 && y > 100 && y < 4000) {
+                xsum += x; ysum += y; good++;
+                if (x < xmin) xmin = x; if (x > xmax) xmax = x;
+                if (y < ymin) ymin = y; if (y > ymax) ymax = y;
+            }
+            delay(200);
+        }
+        r += "],\"good\":" + String(good);
+        if (good > 0) {
+            r += ",\"xmin\":" + String(xmin) + ",\"xmax\":" + String(xmax);
+            r += ",\"ymin\":" + String(ymin) + ",\"ymax\":" + String(ymax);
+            r += ",\"xavg\":" + String(xsum/good) + ",\"yavg\":" + String(ysum/good);
+        }
+        r += "}";
         server.send(200, "application/json", r);
     });
     server.on("/screen", [](){
@@ -962,12 +1016,8 @@ void loop() {
         }
         refreshPrices();
     }
-    static unsigned long lastTick = 0;
-    if (millis() - lastTick > 5000) {
-        lastTick = millis();
-        String line = sourceLabel + "  |  " + fmtAge(lastSuccessMs);
-        drawStatus(line, WiFi.status() == WL_CONNECTED ? C_DIM : C_DOWN);
-    }
+    // 5s drawStatus removed - it was painting over the navbar
+    // Age is available via /state and /screen
     delay(50);
 }
 

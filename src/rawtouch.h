@@ -7,6 +7,7 @@
 #define RT_MOSI  32
 extern SPIClass rtSPI;
 extern int rtCal[4];
+
 inline uint16_t rtRead(byte cmd) {
   digitalWrite(RT_CS, LOW);
   rtSPI.transfer(cmd);
@@ -15,19 +16,20 @@ inline uint16_t rtRead(byte cmd) {
   digitalWrite(RT_CS, HIGH);
   return ((h << 8) | l) >> 3;
 }
+
 inline void rtBegin() {
   rtSPI.begin(RT_SCK, RT_MISO, RT_MOSI, -1);
   pinMode(RT_CS, OUTPUT);
   digitalWrite(RT_CS, HIGH);
 }
-inline void rtSort(uint16_t *a, int n) {
-  for (int i = 1; i < n; i++) { uint16_t k = a[i]; int j = i - 1;
-    while (j >= 0 && a[j] > k) { a[j+1] = a[j]; j--; } a[j+1] = k; }
-}
+
 inline bool rtRaw(uint16_t *rx, uint16_t *ry, uint16_t *rz) {
-  uint32_t ax = 0, ay = 0, az = 0;
+  uint32_t ax = 0, ay = 0;
   int good = 0;
   uint16_t xmin = 4095, xmax = 0, ymin = 4095, ymax = 0;
+  // Calibration bounds. Any raw value outside this cannot be a real touch.
+  const uint16_t X_MIN = 700,  X_MAX = 3300;
+  const uint16_t Y_MIN = 1300, Y_MAX = 3150;
   rtSPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE0));
   for (int n = 0; n < 8; n++) {
     rtRead(0xB1);
@@ -35,7 +37,7 @@ inline bool rtRaw(uint16_t *rx, uint16_t *ry, uint16_t *rz) {
     uint16_t x = rtRead(0x91);
     rtRead(0xD1);
     uint16_t y = rtRead(0xD1);
-    if (x > 200 && x < 3900 && y > 200 && y < 3900) {
+    if (x > X_MIN && x < X_MAX && y > Y_MIN && y < Y_MAX) {
       ax += x; ay += y; good++;
       if (x < xmin) xmin = x; if (x > xmax) xmax = x;
       if (y < ymin) ymin = y; if (y > ymax) ymax = y;
@@ -44,19 +46,34 @@ inline bool rtRaw(uint16_t *rx, uint16_t *ry, uint16_t *rz) {
   }
   rtSPI.endTransaction();
   if (good < 4) { *rx = 0; *ry = 0; *rz = 0; return false; }
-  if ((xmax - xmin) > 400 || (ymax - ymin) > 400) {
+  if ((xmax - xmin) > 300 || (ymax - ymin) > 300) {
     *rx = 0; *ry = 0; *rz = 0; return false;
   }
-  *rx = ax / good; *ry = ay / good; *rz = az / good;
+  *rx = ax / good; *ry = ay / good; *rz = 0;
   return true;
 }
+
 inline bool rtTouch(uint16_t *sx, uint16_t *sy) {
+  static uint16_t lastX = 0, lastY = 0;
+  static int stable = 0;
+  static unsigned long lastGoodMs = 0;
   uint16_t x, y, z;
-  if (!rtRaw(&x, &y, &z)) return false;
+  if (!rtRaw(&x, &y, &z)) {
+    if (millis() - lastGoodMs > 300) stable = 0;
+    return false;
+  }
   long px = (long)(x - rtCal[0]) * 320 / (rtCal[1] - rtCal[0]);
   long py = (long)(y - rtCal[2]) * 240 / (rtCal[3] - rtCal[2]);
   if (px < 0) px = 0; if (px > 319) px = 319;
   if (py < 0) py = 0; if (py > 239) py = 239;
+  if (stable > 0 && abs((int)px - (int)lastX) < 80 && abs((int)py - (int)lastY) < 80) {
+    stable++;
+  } else {
+    stable = 1;
+  }
+  lastX = px; lastY = py;
+  lastGoodMs = millis();
+  if (stable < 2) return false;
   *sx = (uint16_t)px; *sy = (uint16_t)py;
   return true;
 }
