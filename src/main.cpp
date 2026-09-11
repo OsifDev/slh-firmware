@@ -533,6 +533,52 @@ void setupServer() {
         if (server.hasArg("n")) { screenMode = server.arg("n").toInt() % 3; firstDraw = true; drawAll(); }
         server.send(200, "application/json", "{\"screen\":\"" + String(SCREEN_NAMES[screenMode]) + "\"}");
     });
+    server.on("/view", [](){
+        String v = "{";
+        auto nm = [](ScreenId s) -> String {
+            switch (s) {
+                case SCR_PRICES: return "prices";
+                case SCR_MARKET: return "market";
+                case SCR_SETUP:  return "setup";
+                case SCR_SHOW:   return "show";
+                case SCR_LESSON: return "lesson";
+                default:         return "home";
+            }
+        };
+        v += "\"screen\":\"" + nm(g_currentScreen) + "\",";
+        v += "\"lines\":[";
+        if (g_currentScreen == SCR_LESSON) {
+            v += "\"LESSON PAGE " + String(g_lessonPage + 1) + " of " + String(LESSON_COUNT) + "\",";
+            v += "\"(hebrew bitmap - not text)\"";
+        } else if (g_currentScreen == SCR_HOME) {
+            v += "\"SLH OS - HOME\",\"PRICES  SETUP  SHOW\",\"LESSON  MARKET  WALLET\"";
+        } else if (g_currentScreen == SCR_SHOW) {
+            v += "\"SLH PRESALE\",\"ILS 444\"";
+        } else {
+            for (int i = 0; i < COIN_COUNT; i++) {
+                if (i) v += ",";
+                String row = String(coins[i].symbol) + "  ";
+                if (!coins[i].valid) row += "--";
+                else if (!strcmp(coins[i].symbol, "SLH")) row += "ILS 444  PRESALE";
+                else {
+                    row += "$" + String(coins[i].price, 2);
+                    row += "  " + String(coins[i].change24h, 2) + "%";
+                    if (g_currentScreen == SCR_MARKET && coins[i].high24 > coins[i].low24) {
+                        float rg = coins[i].high24 - coins[i].low24;
+                        int pos = (int)((coins[i].price - coins[i].low24) / rg * 100.0f);
+                        row += "  pos " + String(pos) + "%";
+                        row += "  rng " + String(rg / coins[i].low24 * 100.0f, 2) + "%";
+                    }
+                }
+                v += "\"" + row + "\"";
+            }
+        }
+        v += "],";
+        v += "\"source\":\"" + sourceLabel + "\",";
+        v += "\"age_s\":" + String(lastSuccessMs ? (millis()-lastSuccessMs)/1000 : 0);
+        v += "}";
+        server.send(200, "application/json", v);
+    });
     server.on("/setcal", [](){
         if (server.hasArg("x0")) rtCal[0] = server.arg("x0").toInt();
         if (server.hasArg("x1")) rtCal[1] = server.arg("x1").toInt();
