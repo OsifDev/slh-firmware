@@ -63,6 +63,7 @@ GET /touch              live touch read, raw + mapped
 GET /setcal?x0&x1&y0&y1 update touch calibration (RAM only)
 GET /rawdump            10 raw XPT2046 samples
 GET /refresh            force price refresh
+GET /view               what is on screen now, as text lines
 GET /ota                firmware upload form
 
 ## Helper scripts (in this folder)
@@ -70,6 +71,7 @@ GET /ota                firmware upload form
 screen.ps1      ASCII render of what is on the device display
 market.ps1      trading context table: range, volatility, fees
 flash-ota.ps1   build + wireless flash + verify
+view.ps1        renders /view - see the device screen from the terminal
 
 ## Ground rules - these exist because they were learned the hard way
 
@@ -143,4 +145,5 @@ background via scheduled task SLH-PriceLogger. Writes prices.csv
 every 60s: timestamp, symbol, price, change, high, low, volume,
 trades. This is the foundation for any future backtesting.
 Build strategy from this data, not the other way around.
+
 
