@@ -5,3 +5,5 @@ src/lesson_bitmaps.h
 *.baksrc/lesson_bitmaps.h
 src/*.bak
 src/*.keep
+
+build.log

@@ -103,6 +103,17 @@ view.ps1        renders /view - see the device screen from the terminal
 8. This user pastes terminal output back. Read it carefully -
    half the bugs are visible in what did NOT print.
 
+
+
+9. lesson_bitmaps.h is RLE-encoded, not raw pixels. The decoder in
+   lesson.h needs LESSON_SIZES[] emitted by render_lessons.py.
+   Run render_lessons.py before any build that touches lesson pages,
+   or the header goes stale and the build fails on LESSON_SIZES.
+
+10. Utility scripts that read conventions from code (like /layout)
+    must parse the source at runtime, not embed constants. The old
+    /layout used y += 66 after the code moved to y += 40 and lied.
+
 ## Product rules
 
 This device must NOT tell anyone which direction to trade.
@@ -145,5 +156,8 @@ background via scheduled task SLH-PriceLogger. Writes prices.csv
 every 60s: timestamp, symbol, price, change, high, low, volume,
 trades. This is the foundation for any future backtesting.
 Build strategy from this data, not the other way around.
+
+
+
 
 
