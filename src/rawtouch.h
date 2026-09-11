@@ -27,20 +27,26 @@ inline void rtSort(uint16_t *a, int n) {
 inline bool rtRaw(uint16_t *rx, uint16_t *ry, uint16_t *rz) {
   uint32_t ax = 0, ay = 0, az = 0;
   int good = 0;
+  uint16_t xmin = 4095, xmax = 0, ymin = 4095, ymax = 0;
   rtSPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE0));
   for (int n = 0; n < 8; n++) {
-    uint16_t z = rtRead(0xB1);
+    rtRead(0xB1);
     rtRead(0x91);
     uint16_t x = rtRead(0x91);
     rtRead(0xD1);
     uint16_t y = rtRead(0xD1);
-    if (z > 100 && x > 200 && x < 3900 && y > 200 && y < 3900) {
-      ax += x; ay += y; az += z; good++;
+    if (x > 200 && x < 3900 && y > 200 && y < 3900) {
+      ax += x; ay += y; good++;
+      if (x < xmin) xmin = x; if (x > xmax) xmax = x;
+      if (y < ymin) ymin = y; if (y > ymax) ymax = y;
     }
     delayMicroseconds(200);
   }
   rtSPI.endTransaction();
-  if (good < 3) { *rx = 0; *ry = 0; *rz = 0; return false; }
+  if (good < 4) { *rx = 0; *ry = 0; *rz = 0; return false; }
+  if ((xmax - xmin) > 400 || (ymax - ymin) > 400) {
+    *rx = 0; *ry = 0; *rz = 0; return false;
+  }
   *rx = ax / good; *ry = ay / good; *rz = az / good;
   return true;
 }
