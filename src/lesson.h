@@ -3,7 +3,6 @@
 
 static int           g_lessonPage     = 0;
 static unsigned long g_lessonLastFlip = 0;
-static const int     LESSON_COUNT     = 4;
 static const unsigned long LESSON_FLIP_MS = 12000UL;
 
 static inline uint16_t rgb332_to_565(uint8_t px) {
@@ -17,7 +16,7 @@ static inline uint16_t rgb332_to_565(uint8_t px) {
 }
 
 void drawLessonPage(int n) {
-    if (n < 0 || n >= LESSON_COUNT) n = 0;
+    if (n < 0 || n >= (int)LESSON_COUNT) n = 0;
     const uint8_t* src = LESSON_PAGES[n];
     static uint16_t rowBuf[320];
     for (int y = 0; y < (int)LESSON_H; y++) {
@@ -40,7 +39,7 @@ void drawLessonScreen() {
 
 void updateLessonScreen() {
     if (millis() - g_lessonLastFlip >= LESSON_FLIP_MS) {
-        g_lessonPage = (g_lessonPage + 1) % LESSON_COUNT;
+        g_lessonPage = (g_lessonPage + 1) % (int)LESSON_COUNT;
         drawLessonPage(g_lessonPage);
         g_lessonLastFlip = millis();
     }

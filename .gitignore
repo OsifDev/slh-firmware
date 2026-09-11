@@ -2,4 +2,6 @@
 .vscode/
 fonts/*.png
 src/lesson_bitmaps.h
-*.bak
+*.baksrc/lesson_bitmaps.h
+src/*.bak
+src/*.keep

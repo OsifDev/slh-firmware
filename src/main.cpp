@@ -1,4 +1,4 @@
-﻿#include <Arduino.h>
+#include <Arduino.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
@@ -7,7 +7,7 @@
 #include <TFT_eSPI.h>
 #include "rawtouch.h"
 SPIClass rtSPI(VSPI);
-int rtCal[4] = {3700, 350, 3600, 400};
+int rtCal[4] = {3204, 740, 3095, 1355};
 #include "demo.h"
 #include <WebServer.h>
 #include <Update.h>
@@ -32,6 +32,18 @@ uint16_t touchCal[5] = { 1169, 2749, 837, 2958, 7 };
 #define C_UP        0x07E0
 #define C_DOWN      0xF9A6
 #define C_GOLD      0xFEA0
+
+// --- screensaver state ---
+static unsigned long g_lastActivity  = 0;
+static bool          g_saverOn       = true;
+static bool          g_saverActive   = false;
+static unsigned long g_saverLastFlip = 0;
+static const unsigned long SAVER_IDLE_MS  = 90000UL;
+static const unsigned long SAVER_CYCLE_MS = 20000UL;
+
+static bool          g_touchWasDown  = false;
+static unsigned long g_lastTouchMs   = 0;
+static const unsigned long TOUCH_COOLDOWN_MS = 350UL;
 
 TFT_eSPI tft = TFT_eSPI();
 
@@ -67,6 +79,13 @@ unsigned long lastRefresh   = 0;
 unsigned long lastSuccessMs = 0;
 String        sourceLabel   = "--";
 bool          firstDraw     = true;
+
+// 0=prices 1=market 2=setup
+int  screenMode = 0;
+int  setupCoin  = 0;
+const char* SCREEN_NAMES[3] = {"prices", "market", "setup"};
+void drawMarket();
+void drawSetup();
 
 String fmtPrice(float p) {
     if (p <= 0)      return "--";
@@ -200,6 +219,8 @@ void drawRow(int index, const Coin& c) {
 }
 
 void drawAll() {
+    if (screenMode == 1) { drawMarket(); return; }
+    if (screenMode == 2) { drawSetup();  return; }
     if (firstDraw) { drawFrame(); firstDraw = false; }
     for (int i = 0; i < COIN_COUNT; i++) drawRow(i, coins[i]);
     String line = sourceLabel + "  |  " + fmtAge(lastSuccessMs);
@@ -374,6 +395,7 @@ String buildStateJson() {
     j += "\"free_heap\":" + String(ESP.getFreeHeap()) + ",";
     j += "\"chip\":\"" + String(ESP.getChipModel()) + "\"";
     j += "},";
+    j += "\"screen\":\"" + String(SCREEN_NAMES[screenMode]) + "\",";
     j += "\"source\":\"" + sourceLabel + "\",";
     j += "\"age_s\":" + String(lastSuccessMs ? (millis()-lastSuccessMs)/1000 : 0) + ",";
     j += "\"touch\":{";
@@ -423,12 +445,14 @@ void setupServer() {
                 case SCR_MARKET: return "market";
                 case SCR_SETUP:  return "setup";
                 case SCR_SHOW:   return "show";
+                case SCR_HOME:   return "home";
+                case SCR_LESSON: return "lesson";
                 default:         return "unknown";
             }
         };
         if (to.length() == 0) {
             String r = "{\"current\":\"" + nameOf(g_currentScreen)
-                     + "\",\"all\":[\"prices\",\"market\",\"setup\",\"show\"]}";
+                     + "\",\"all\":[\"prices\",\"market\",\"setup\",\"show\",\"lesson\"]}";
             server.send(200, "application/json", r);
             return;
         }
@@ -437,6 +461,8 @@ void setupServer() {
         else if (to == "market") target = SCR_MARKET;
         else if (to == "setup")  target = SCR_SETUP;
         else if (to == "show")   target = SCR_SHOW;
+        else if (to == "home")   target = SCR_HOME;
+        else if (to == "lesson") { target = SCR_LESSON; g_lessonPage = 0; }
         else if (to == "next")   target = (ScreenId)(((int)g_currentScreen + 1) % (int)SCR_COUNT);
         else { server.send(400, "application/json", "{\"error\":\"unknown\"}"); return; }
         g_currentScreen = target;
@@ -462,6 +488,19 @@ void setupServer() {
         drawCurrentScreen();
         server.send(200, "application/json",
             "{\"ok\":true,\"page\":" + String(n) + "}");
+    });    server.on("/backlight", [](){
+        String p = server.arg("pct");
+        static uint8_t blPct = 100;
+        if (p.length() == 0) {
+            server.send(200, "application/json", "{\"pct\":" + String(blPct) + "}");
+            return;
+        }
+        int v = p.toInt();
+        if (v < 5) v = 5;
+        if (v > 100) v = 100;
+        blPct = (uint8_t)v;
+        ledcWrite(0, (v * 255) / 100);
+        server.send(200, "application/json", "{\"ok\":true,\"pct\":" + String(v) + "}");
     });    server.on("/touch", [](){
         uint16_t rx, ry, rz, sx, sy;
         bool valid = rtRaw(&rx, &ry, &rz);
@@ -488,6 +527,10 @@ void setupServer() {
         rtSPI.endTransaction();
         r += "]}";
         server.send(200, "application/json", r);
+    });
+    server.on("/screen", [](){
+        if (server.hasArg("n")) { screenMode = server.arg("n").toInt() % 3; firstDraw = true; drawAll(); }
+        server.send(200, "application/json", "{\"screen\":\"" + String(SCREEN_NAMES[screenMode]) + "\"}");
     });
     server.on("/setcal", [](){
         if (server.hasArg("x0")) rtCal[0] = server.arg("x0").toInt();
@@ -555,6 +598,145 @@ void fetchStats() {
     }
 }
 
+void drawMarket() {
+    tft.fillScreen(C_BG);
+    tft.fillRect(0, 0, 320, 28, C_PANEL);
+    tft.drawFastHLine(0, 28, 320, C_ACCENT);
+    tft.setTextDatum(ML_DATUM);
+    tft.setTextColor(C_ACCENT, C_PANEL);
+    tft.drawString("MARKET", 10, 14, 4);
+    tft.setTextColor(C_DIM, C_PANEL);
+    tft.drawString("24h context", 110, 14, 2);
+    tft.setTextDatum(TL_DATUM);
+
+    int y = 36;
+    for (int i = 0; i < COIN_COUNT; i++) {
+        if (!coins[i].binanceSym || coins[i].high24 <= coins[i].low24) continue;
+        float rng = coins[i].high24 - coins[i].low24;
+        float pct = rng / coins[i].low24 * 100.0f;
+        int pos = (int)((coins[i].price - coins[i].low24) / rng * 100.0f);
+        if (pos < 0) pos = 0; if (pos > 100) pos = 100;
+
+        tft.setTextColor(C_ACCENT, C_BG);
+        tft.drawString(coins[i].symbol, 10, y, 4);
+
+        uint16_t vc = (pct > 4) ? C_GOLD : ((pct > 2) ? C_TEXT : C_DIM);
+        tft.setTextDatum(MR_DATUM);
+        tft.setTextColor(vc, C_BG);
+        tft.drawString(String(pct, 2) + "% day", 310, y + 10, 2);
+        tft.setTextDatum(TL_DATUM);
+
+        int by = y + 26;
+        tft.drawRect(10, by, 300, 12, C_PANEL);
+        tft.fillRect(11, by + 1, 298, 10, C_PANEL);
+        int mx = 11 + (298 * pos) / 100;
+        uint16_t pc = (pos > 70) ? C_UP : ((pos < 30) ? C_DOWN : C_ACCENT);
+        tft.fillRect(mx - 2, by, 4, 12, pc);
+
+        tft.setTextColor(C_DIM, C_BG);
+        tft.drawString(String(pos) + "% of range", 10, by + 15, 2);
+        tft.setTextDatum(MR_DATUM);
+        tft.drawString("L " + String(coins[i].low24, 0) + "  H " + String(coins[i].high24, 0), 310, by + 20, 2);
+        tft.setTextDatum(TL_DATUM);
+
+        y += 66;
+    }
+    tft.setTextDatum(MC_DATUM);
+    tft.setTextColor(C_DIM, C_BG);
+    tft.drawString("tap to change screen", 160, 232, 2);
+    tft.setTextDatum(TL_DATUM);
+}
+
+void drawSetup() {
+    Coin& c = coins[setupCoin];
+    tft.fillScreen(C_BG);
+    tft.fillRect(0, 0, 320, 28, C_PANEL);
+    tft.drawFastHLine(0, 28, 320, C_ACCENT);
+    tft.setTextDatum(ML_DATUM);
+    tft.setTextColor(C_ACCENT, C_PANEL);
+    tft.drawString("SETUP", 10, 14, 4);
+    tft.setTextColor(C_GOLD, C_PANEL);
+    tft.drawString(c.symbol, 90, 14, 4);
+    tft.setTextColor(C_DIM, C_PANEL);
+    tft.drawString("risk per $1000", 150, 14, 2);
+    tft.setTextDatum(TL_DATUM);
+
+    if (c.high24 <= c.low24) {
+        tft.setTextColor(C_DIM, C_BG);
+        tft.drawString("no data yet", 20, 100, 4);
+        return;
+    }
+
+    float rng  = c.high24 - c.low24;
+    float move = rng / c.low24 * 100.0f;
+    int   pos  = (int)((c.price - c.low24) / rng * 100.0f);
+    if (pos < 0) pos = 0; if (pos > 100) pos = 100;
+
+    float spotFee = 0.20f;
+    float futFee  = 0.10f;
+    int spotShare = (int)(spotFee / move * 100.0f);
+    int futShare  = (int)(futFee  / move * 100.0f);
+
+    int y = 36;
+    tft.setTextColor(C_DIM, C_BG);  tft.drawString("day move", 12, y, 2);
+    tft.setTextColor(C_TEXT, C_BG); tft.drawString(String(move, 2) + "%", 120, y, 2);
+    y += 20;
+
+    tft.setTextColor(C_DIM, C_BG);  tft.drawString("spot fees", 12, y, 2);
+    tft.setTextColor(spotShare > 25 ? C_DOWN : C_TEXT, C_BG);
+    tft.drawString("0.20%  = " + String(spotShare) + "% of move", 120, y, 2);
+    y += 20;
+
+    tft.setTextColor(C_DIM, C_BG);  tft.drawString("futures", 12, y, 2);
+    tft.setTextColor(futShare > 25 ? C_DOWN : C_TEXT, C_BG);
+    tft.drawString("0.10%  = " + String(futShare) + "% of move", 120, y, 2);
+    y += 26;
+
+    tft.drawFastHLine(12, y, 296, C_PANEL);
+    y += 8;
+
+    tft.setTextColor(C_DIM, C_BG);  tft.drawString("stop 1%", 12, y, 2);
+    tft.setTextColor(C_TEXT, C_BG); tft.drawString("risk $10", 120, y, 2);
+    tft.setTextColor(C_DIM, C_BG);  tft.drawString("target 2:1 = $20", 210, y, 2);
+    y += 20;
+    tft.setTextColor(C_DIM, C_BG);  tft.drawString("stop 2%", 12, y, 2);
+    tft.setTextColor(C_TEXT, C_BG); tft.drawString("risk $20", 120, y, 2);
+    tft.setTextColor(C_DIM, C_BG);  tft.drawString("target 2:1 = $40", 210, y, 2);
+    y += 26;
+
+    tft.drawFastHLine(12, y, 296, C_PANEL);
+    y += 8;
+
+    if (pos > 70) {
+        tft.setTextColor(C_GOLD, C_BG);
+        tft.drawString("price near DAY HIGH (" + String(pos) + "%)", 12, y, 2);
+        y += 18;
+        tft.setTextColor(C_DIM, C_BG);
+        tft.drawString("long needs the high to break", 12, y, 2);
+        y += 16;
+        tft.drawString("short needs it to hold", 12, y, 2);
+    } else if (pos < 30) {
+        tft.setTextColor(C_GOLD, C_BG);
+        tft.drawString("price near DAY LOW (" + String(pos) + "%)", 12, y, 2);
+        y += 18;
+        tft.setTextColor(C_DIM, C_BG);
+        tft.drawString("short needs the low to break", 12, y, 2);
+        y += 16;
+        tft.drawString("long needs it to hold", 12, y, 2);
+    } else {
+        tft.setTextColor(C_ACCENT, C_BG);
+        tft.drawString("price MID range (" + String(pos) + "%)", 12, y, 2);
+        y += 18;
+        tft.setTextColor(C_DIM, C_BG);
+        tft.drawString("no edge from position alone", 12, y, 2);
+    }
+
+    tft.setTextDatum(MC_DATUM);
+    tft.setTextColor(C_DIM, C_BG);
+    tft.drawString("tap to change screen", 160, 232, 2);
+    tft.setTextDatum(TL_DATUM);
+}
+
 void refreshPrices() {
     drawStatus("updating...", C_ACCENT);
     bool ok = false;
@@ -575,8 +757,9 @@ void setup() {
     Serial.begin(115200);
     delay(300);
     Serial.println("\n[SLH] Crypto Ticker booting");
-    pinMode(TFT_BL, OUTPUT);
-    digitalWrite(TFT_BL, HIGH);
+    ledcSetup(0, 5000, 8);
+    ledcAttachPin(TFT_BL, 0);
+    ledcWrite(0, 255);
     tft.init();
     tft.setRotation(1);
     tft.setSwapBytes(true);
@@ -618,6 +801,7 @@ void setup() {
     Serial.println(WiFi.localIP());
     drawStatus(WiFi.localIP().toString(), C_UP);
     delay(900);
+    g_lastActivity = millis();
     setupServer();
     refreshPrices();
 }
@@ -625,10 +809,52 @@ void setup() {
 void loop() {
     server.handleClient();
     uint16_t tx, ty;
-    if (rtTouch(&tx, &ty)) {
-        nextScreen();
-        delay(400);
-        return;
+    {
+        uint16_t tx, ty;
+        bool touchDown = rtTouch(&tx, &ty);
+        bool touchEdge = touchDown && !g_touchWasDown;
+        g_touchWasDown = touchDown;
+
+        if (touchEdge && (millis() - g_lastTouchMs) > TOUCH_COOLDOWN_MS) {
+            g_lastTouchMs = millis();
+            g_lastActivity = millis();
+            g_saverActive = false;
+            ledcWrite(0, 255);
+
+            if (tx < 52 && ty < 36) {
+                if (g_currentScreen != SCR_HOME) {
+                    g_currentScreen = SCR_HOME;
+                    drawCurrentScreen();
+                }
+            } else if (g_currentScreen == SCR_HOME) {
+                ScreenId tgt = homeTouchHandler(tx, ty);
+                if (tgt < SCR_COUNT && tgt != g_currentScreen) {
+                    g_currentScreen = tgt;
+                    if (tgt == SCR_PRICES) firstDraw = true;
+                    if (tgt == SCR_LESSON) g_lessonPage = 0;
+                    drawCurrentScreen();
+                }
+            } else {
+                nextScreen();
+            }
+        }
+    }
+    if (g_saverOn) {
+        unsigned long idle = millis() - g_lastActivity;
+        if (!g_saverActive && idle >= SAVER_IDLE_MS) {
+            g_saverActive = true;
+            g_saverLastFlip = millis();
+            ledcWrite(0, 80);
+        }
+        if (g_saverActive) {
+            if (millis() - g_saverLastFlip >= SAVER_CYCLE_MS) {
+                g_saverLastFlip = millis();
+                nextScreen();
+            }
+            if (g_currentScreen == SCR_SHOW) updateShowScreen();
+            delay(30);
+            return;
+        }
     }
     if (g_currentScreen == SCR_SHOW) {
         updateShowScreen();
@@ -655,6 +881,15 @@ void loop() {
     }
     delay(50);
 }
+
+
+
+
+
+
+
+
+
 
 
 

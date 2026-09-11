@@ -1,0 +1,20 @@
+#include <Arduino.h>
+#include "tft_display.h"
+#include "wifi_manager.h"
+
+void setup() {
+    Serial.begin(115200);
+    initDisplay();
+    showReady("Connecting...");
+    if (connectWiFi()) {
+        showReady(WiFi.localIP().toString().c_str());
+    } else {
+        tft.fillScreen(TFT_RED);
+        tft.setCursor(10,10);
+        tft.println("WiFi FAIL");
+    }
+}
+
+void loop() {
+    delay(1000);
+}

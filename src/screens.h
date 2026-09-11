@@ -1,6 +1,6 @@
 ﻿#pragma once
-enum ScreenId { SCR_PRICES = 0, SCR_MARKET, SCR_SETUP, SCR_SHOW, SCR_LESSON, SCR_COUNT };
-ScreenId g_currentScreen = SCR_PRICES;
+enum ScreenId { SCR_PRICES = 0, SCR_MARKET, SCR_SETUP, SCR_SHOW, SCR_LESSON, SCR_HOME, SCR_COUNT };
+ScreenId g_currentScreen = SCR_HOME;
 #define FEE_TAKER_PCT    0.20f
 #define FEE_MAKER_PCT    0.15f
 #define SPREAD_EST_PCT   0.05f
@@ -278,6 +278,7 @@ void updateShowScreen() {
 
 
 #include "lesson.h"
+#include "home_screen.h"
 
 void drawCurrentScreen() {
     if (g_currentScreen != SCR_SHOW) showTeardown();
@@ -288,13 +289,15 @@ void drawCurrentScreen() {
         case SCR_SETUP:  drawSetupScreen();  break;
         case SCR_SHOW:   drawShowScreen();   break;
         case SCR_LESSON: drawLessonScreen(); break;
+        case SCR_HOME:   drawHomeScreen();   break;
     }
 }
 void nextScreen() {
-    g_currentScreen = (ScreenId)(((int)g_currentScreen + 1) % (int)SCR_COUNT);
+    int _next = ((int)g_currentScreen + 1) % (int)SCR_COUNT; if (_next == SCR_HOME) _next = SCR_PRICES; g_currentScreen = (ScreenId)_next;
     if (g_currentScreen == SCR_PRICES) firstDraw = true;
     drawCurrentScreen();
 }
+
 
 
 
