@@ -48,6 +48,11 @@ Coin coins[] = {
 };
 const int COIN_COUNT = sizeof(coins) / sizeof(coins[0]);
 
+#define SPARK_N 24
+float sparkData[4][SPARK_N];
+bool  sparkReady[4] = {false, false, false, false};
+void drawSparkline(int i, int x, int y, int w, int h);
+
 unsigned long lastRefresh   = 0;
 unsigned long lastSuccessMs = 0;
 String        sourceLabel   = "--";
@@ -153,6 +158,8 @@ void drawRow(int index, const Coin& c) {
     tft.setTextDatum(ML_DATUM);
     tft.setTextColor(stripe, C_PANEL);
     tft.drawString(c.symbol, 18, top + h / 2, 4);
+    drawSparkline(index, 62, top + 8, 72, 23);
+
     tft.setTextDatum(MR_DATUM);
     if (c.valid) {
         tft.setTextColor(C_TEXT, C_PANEL);
@@ -250,6 +257,65 @@ bool fetchSLH() {
 
 #endif
 
+void fetchSparklines() {
+    for (int i = 0; i < COIN_COUNT; i++) {
+        if (!coins[i].binanceSym) continue;
+        String url = "https://api.binance.com/api/v3/klines?symbol=";
+        url += coins[i].binanceSym;
+        url += "&interval=1h&limit=";
+        url += String(SPARK_N);
+        String body = httpGet(url.c_str(), 9000);
+        if (body.length() < 20) continue;
+
+        // klines come back as arrays; index 4 of each is the close price
+        int idx = 0, pos = 0;
+        while (idx < SPARK_N) {
+            int open = body.indexOf('[', pos);
+            if (open < 0) break;
+            int close = body.indexOf(']', open);
+            if (close < 0) break;
+            String row = body.substring(open + 1, close);
+            int field = 0, from = 0;
+            String val = "";
+            for (int k = 0; k <= row.length(); k++) {
+                if (k == row.length() || row[k] == ',') {
+                    if (field == 4) { val = row.substring(from, k); break; }
+                    field++; from = k + 1;
+                }
+            }
+            val.replace("\"", "");
+            float p = val.toFloat();
+            if (p > 0) sparkData[i][idx++] = p;
+            pos = close + 1;
+        }
+        if (idx == SPARK_N) sparkReady[i] = true;
+        delay(150);
+    }
+}
+
+void drawSparkline(int i, int x, int y, int w, int h) {
+    if (!sparkReady[i]) return;
+    float lo = sparkData[i][0], hi = sparkData[i][0];
+    for (int k = 1; k < SPARK_N; k++) {
+        if (sparkData[i][k] < lo) lo = sparkData[i][k];
+        if (sparkData[i][k] > hi) hi = sparkData[i][k];
+    }
+    float range = hi - lo;
+    if (range <= 0) range = 1;
+
+    bool up = sparkData[i][SPARK_N-1] >= sparkData[i][0];
+    uint16_t col = up ? C_UP : C_DOWN;
+
+    int prevX = x, prevY = y + h - (int)((sparkData[i][0] - lo) / range * h);
+    for (int k = 1; k < SPARK_N; k++) {
+        int cx = x + (k * w) / (SPARK_N - 1);
+        int cy = y + h - (int)((sparkData[i][k] - lo) / range * h);
+        tft.drawLine(prevX, prevY, cx, cy, col);
+        prevX = cx; prevY = cy;
+    }
+    tft.fillCircle(prevX, prevY, 2, col);
+}
+
 void refreshPrices() {
     drawStatus("updating...", C_ACCENT);
     bool ok = false;
@@ -260,6 +326,8 @@ void refreshPrices() {
     if (fetchSLH() && ok) sourceLabel += " + SLH";
 #endif
     if (ok) lastSuccessMs = millis();
+    static bool sparkOnce = false;
+    if (!sparkOnce && ok) { fetchSparklines(); sparkOnce = true; }
     lastRefresh = millis();
     drawAll();
 }
