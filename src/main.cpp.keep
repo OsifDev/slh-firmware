@@ -5,9 +5,6 @@
 #include <WiFiManager.h>
 #include <ArduinoJson.h>
 #include <TFT_eSPI.h>
-#include "rawtouch.h"
-SPIClass rtSPI(VSPI);
-int rtCal[4] = {3700, 350, 3600, 400};
 #include "demo.h"
 #include <WebServer.h>
 WebServer server(80);
@@ -396,38 +393,10 @@ void setupServer() {
     server.on("/state", [](){ server.send(200, "application/json", buildStateJson()); });
     server.on("/refresh", [](){ server.send(200, "application/json", "{\"ok\":true}"); lastRefresh = 0; });
     server.on("/touch", [](){
-        uint16_t rx, ry, rz, sx, sy;
-        bool valid = rtRaw(&rx, &ry, &rz);
-        bool mapped = rtTouch(&sx, &sy);
-        String r = "{\"pressed\":"; r += (valid ? "true" : "false");
-        r += ",\"raw\":{\"x\":" + String(rx) + ",\"y\":" + String(ry) + ",\"z\":" + String(rz) + "}";
-        r += ",\"screen\":{\"x\":" + String(mapped?sx:0) + ",\"y\":" + String(mapped?sy:0) + "}";
-        r += ",\"cal\":[" + String(rtCal[0]) + "," + String(rtCal[1]) + "," + String(rtCal[2]) + "," + String(rtCal[3]) + "]}";
-        server.send(200, "application/json", r);
-    });
-    server.on("/rawdump", [](){
-        String r = "{\"samples\":[";
-        rtSPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE0));
-        for (int n = 0; n < 10; n++) {
-            uint16_t z = rtRead(0xB1);
-            rtRead(0x91);
-            uint16_t x = rtRead(0x91);
-            rtRead(0xD1);
-            uint16_t y = rtRead(0xD1);
-            if (n) r += ",";
-            r += "{\"x\":" + String(x) + ",\"y\":" + String(y) + ",\"z\":" + String(z) + "}";
-            delayMicroseconds(300);
-        }
-        rtSPI.endTransaction();
-        r += "]}";
-        server.send(200, "application/json", r);
-    });
-    server.on("/setcal", [](){
-        if (server.hasArg("x0")) rtCal[0] = server.arg("x0").toInt();
-        if (server.hasArg("x1")) rtCal[1] = server.arg("x1").toInt();
-        if (server.hasArg("y0")) rtCal[2] = server.arg("y0").toInt();
-        if (server.hasArg("y1")) rtCal[3] = server.arg("y1").toInt();
-        String r = "{\"cal\":[" + String(rtCal[0]) + "," + String(rtCal[1]) + "," + String(rtCal[2]) + "," + String(rtCal[3]) + "]}";
+        uint16_t tx, ty; bool hit = tft.getTouch(&tx, &ty);
+        String r = "{\"pressed\":"; r += (hit ? "true" : "false");
+        r += ",\"x\":" + String(hit?tx:0) + ",\"y\":" + String(hit?ty:0);
+        r += ",\"raw_z\":" + String(analogRead(36)) + "}";
         server.send(200, "application/json", r);
     });
     server.begin();
@@ -460,7 +429,6 @@ void setup() {
     tft.setRotation(1);
     tft.setSwapBytes(true);
     tft.setTouch(touchCal);
-    rtBegin();
 
     // hold a finger on the screen during boot to recalibrate
     {
@@ -504,7 +472,7 @@ void setup() {
 void loop() {
     server.handleClient();
     uint16_t tx, ty;
-    if (rtTouch(&tx, &ty)) {
+    if (tft.getTouch(&tx, &ty)) {
         if (ty < 34) {
             runDemoMode();
             firstDraw = true;
