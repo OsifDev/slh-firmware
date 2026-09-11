@@ -1,4 +1,4 @@
-#include <Arduino.h>
+﻿#include <Arduino.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
@@ -41,15 +41,19 @@ struct Coin {
     const char* binanceSym;
     float       price;
     float       change24h;
+    float       high24;
+    float       low24;
+    float       volume;
+    int         trades;
     bool        valid;
 };
 
 Coin coins[] = {
-    { "BTC", "bitcoin",     "BTCUSDT", 0, 0, false },
-    { "ETH", "ethereum",    "ETHUSDT", 0, 0, false },
-    { "BNB", "binancecoin", "BNBUSDT", 0, 0, false },
+    { "BTC", "bitcoin",     "BTCUSDT", 0, 0, 0, 0, 0, 0, false },
+    { "ETH", "ethereum",    "ETHUSDT", 0, 0, 0, 0, 0, 0, false },
+    { "BNB", "binancecoin", "BNBUSDT", 0, 0, 0, 0, 0, 0, false },
 #if SLH_ENABLED
-    { "SLH", nullptr,       nullptr,   0, 0, false },
+    { "SLH", nullptr,       nullptr,   0, 0, 0, 0, 0, 0, false },
 #endif
 };
 const int COIN_COUNT = sizeof(coins) / sizeof(coins[0]);
@@ -151,7 +155,10 @@ void drawFrame() {
     tft.setTextColor(C_ACCENT, C_PANEL);
     tft.drawString("SLH", 42, 17, 4);
     tft.setTextColor(C_DIM, C_PANEL);
-    tft.drawString("CRYPTO", 92, 17, 2);
+    tft.drawString("PRICES", 96, 17, 2);
+    tft.setTextDatum(MR_DATUM);
+    tft.setTextColor(C_GOLD, C_PANEL);
+    tft.drawString("1/3", 312, 17, 2);
     tft.setTextDatum(TL_DATUM);
 }
 
@@ -198,6 +205,8 @@ void drawAll() {
     String line = sourceLabel + "  |  " + fmtAge(lastSuccessMs);
     drawStatus(line, (WiFi.status() == WL_CONNECTED) ? C_DIM : C_DOWN);
 }
+
+#include "screens.h"
 
 bool fetchCoinGecko() {
     String url = "https://api.coingecko.com/api/v3/simple/price?ids=";
@@ -380,6 +389,16 @@ String buildStateJson() {
         j += ",\"price\":" + String(coins[i].price, 6);
         j += ",\"change_24h\":" + String(coins[i].change24h, 3);
         j += ",\"valid\":"; j += (coins[i].valid ? "true" : "false");
+        j += ",\"high24\":" + String(coins[i].high24, 2);
+        j += ",\"low24\":" + String(coins[i].low24, 2);
+        j += ",\"volume\":" + String(coins[i].volume, 1);
+        j += ",\"trades\":" + String(coins[i].trades);
+        if (coins[i].high24 > coins[i].low24) {
+            float rng = coins[i].high24 - coins[i].low24;
+            j += ",\"range_pct\":" + String(rng / coins[i].low24 * 100.0f, 2);
+            j += ",\"pos_in_range\":" + String((coins[i].price - coins[i].low24) / rng * 100.0f, 1);
+        } else { j += ",\"range_pct\":0,\"pos_in_range\":0"; }
+
         j += ",\"spark\":";
         if (sparkReady[i]) {
             j += "[";
@@ -396,7 +415,54 @@ void setupServer() {
     server.on("/", [](){ server.send(200, "application/json", buildStateJson()); });
     server.on("/state", [](){ server.send(200, "application/json", buildStateJson()); });
     server.on("/refresh", [](){ server.send(200, "application/json", "{\"ok\":true}"); lastRefresh = 0; });
-    server.on("/touch", [](){
+    server.on("/screen", [](){
+        String to = server.arg("to");
+        auto nameOf = [](ScreenId s) -> String {
+            switch (s) {
+                case SCR_PRICES: return "prices";
+                case SCR_MARKET: return "market";
+                case SCR_SETUP:  return "setup";
+                case SCR_SHOW:   return "show";
+                default:         return "unknown";
+            }
+        };
+        if (to.length() == 0) {
+            String r = "{\"current\":\"" + nameOf(g_currentScreen)
+                     + "\",\"all\":[\"prices\",\"market\",\"setup\",\"show\"]}";
+            server.send(200, "application/json", r);
+            return;
+        }
+        ScreenId target = g_currentScreen;
+        if      (to == "prices") target = SCR_PRICES;
+        else if (to == "market") target = SCR_MARKET;
+        else if (to == "setup")  target = SCR_SETUP;
+        else if (to == "show")   target = SCR_SHOW;
+        else if (to == "next")   target = (ScreenId)(((int)g_currentScreen + 1) % (int)SCR_COUNT);
+        else { server.send(400, "application/json", "{\"error\":\"unknown\"}"); return; }
+        g_currentScreen = target;
+        if (target == SCR_PRICES) firstDraw = true;
+        drawCurrentScreen();
+        String r = "{\"ok\":true,\"screen\":\"" + nameOf(target) + "\"}";
+        server.send(200, "application/json", r);
+    });
+    server.on("/lesson", [](){
+        String p = server.arg("page");
+        if (p.length() == 0) {
+            server.send(200, "application/json",
+                "{\"page\":" + String(g_lessonPage) + ",\"count\":" + String(LESSON_COUNT) + "}");
+            return;
+        }
+        int n = p.toInt();
+        if (n < 0 || n >= LESSON_COUNT) {
+            server.send(400, "application/json", "{\"error\":\"range\"}");
+            return;
+        }
+        g_lessonPage = n;
+        g_currentScreen = SCR_LESSON;
+        drawCurrentScreen();
+        server.send(200, "application/json",
+            "{\"ok\":true,\"page\":" + String(n) + "}");
+    });    server.on("/touch", [](){
         uint16_t rx, ry, rz, sx, sy;
         bool valid = rtRaw(&rx, &ry, &rz);
         bool mapped = rtTouch(&sx, &sy);
@@ -472,6 +538,23 @@ void setupServer() {
     Serial.println("[SLH] HTTP API on port 80");
 }
 
+void fetchStats() {
+    for (int i = 0; i < COIN_COUNT; i++) {
+        if (!coins[i].binanceSym) continue;
+        String url = "https://api.binance.com/api/v3/ticker/24hr?symbol=";
+        url += coins[i].binanceSym;
+        String body = httpGet(url.c_str(), 8000);
+        if (body.length() < 20) continue;
+        DynamicJsonDocument doc(3072);
+        if (deserializeJson(doc, body)) continue;
+        coins[i].high24  = String((const char*)(doc["highPrice"] | "0")).toFloat();
+        coins[i].low24   = String((const char*)(doc["lowPrice"]  | "0")).toFloat();
+        coins[i].volume  = String((const char*)(doc["volume"]    | "0")).toFloat();
+        coins[i].trades  = doc["count"]      | 0;
+        delay(120);
+    }
+}
+
 void refreshPrices() {
     drawStatus("updating...", C_ACCENT);
     bool ok = false;
@@ -481,11 +564,11 @@ void refreshPrices() {
 #if SLH_ENABLED
     if (fetchSLH() && ok) sourceLabel += " + SLH";
 #endif
-    if (ok) lastSuccessMs = millis();
+    if (ok) { fetchStats(); lastSuccessMs = millis(); }
     static bool sparkOnce = false;
     if (!sparkOnce && ok) { fetchSparklines(); sparkOnce = true; }
     lastRefresh = millis();
-    drawAll();
+    drawCurrentScreen();
 }
 
 void setup() {
@@ -543,8 +626,18 @@ void loop() {
     server.handleClient();
     uint16_t tx, ty;
     if (rtTouch(&tx, &ty)) {
-        refreshPrices();
+        nextScreen();
         delay(400);
+        return;
+    }
+    if (g_currentScreen == SCR_SHOW) {
+        updateShowScreen();
+        delay(5);
+        return;
+    }
+    if (g_currentScreen == SCR_LESSON) {
+        updateLessonScreen();
+        delay(50);
         return;
     }
     if (millis() - lastRefresh >= REFRESH_MS) {
@@ -562,3 +655,7 @@ void loop() {
     }
     delay(50);
 }
+
+
+
+

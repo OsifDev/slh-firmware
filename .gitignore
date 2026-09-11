@@ -1,6 +1,5 @@
 .pio/
-_old_backup/
-*.bin
+.vscode/
+fonts/*.png
+src/lesson_bitmaps.h
 *.bak
-src/secrets.h
-src/secrets.h
