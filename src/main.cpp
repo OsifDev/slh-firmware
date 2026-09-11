@@ -10,6 +10,7 @@ SPIClass rtSPI(VSPI);
 int rtCal[4] = {3700, 350, 3600, 400};
 #include "demo.h"
 #include <WebServer.h>
+#include <Update.h>
 WebServer server(80);
 
 #define AP_NAME       "SLH-TICKER"
@@ -370,7 +371,7 @@ String buildStateJson() {
     { uint16_t tx, ty; bool hit = tft.getTouch(&tx, &ty);
       j += "\"pressed\":"; j += (hit ? "true" : "false");
       j += ",\"x\":" + String(hit ? tx : 0) + ",\"y\":" + String(hit ? ty : 0);
-      j += ",\"cal\":["; for (int k=0;k<5;k++){ j += String(touchCal[k]); if(k<4) j += ","; } j += "]"; }
+      j += ",\"cal\":[" + String(rtCal[0]) + "," + String(rtCal[1]) + "," + String(rtCal[2]) + "," + String(rtCal[3]) + "]"; }
     j += "},";
     j += "\"rows\":[";
     for (int i = 0; i < COIN_COUNT; i++) {
@@ -429,6 +430,43 @@ void setupServer() {
         if (server.hasArg("y1")) rtCal[3] = server.arg("y1").toInt();
         String r = "{\"cal\":[" + String(rtCal[0]) + "," + String(rtCal[1]) + "," + String(rtCal[2]) + "," + String(rtCal[3]) + "]}";
         server.send(200, "application/json", r);
+    });
+    server.on("/ota", HTTP_GET, [](){
+        server.send(200, "text/html",
+          "<html><body style='font-family:sans-serif;background:#111;color:#eee;padding:30px'>"
+          "<h2>SLH Firmware Update</h2>"
+          "<form method='POST' action='/update' enctype='multipart/form-data'>"
+          "<input type='file' name='f'><br><br>"
+          "<input type='submit' value='Upload firmware.bin'></form></body></html>");
+    });
+    server.on("/update", HTTP_POST, [](){
+        bool ok = !Update.hasError();
+        server.send(200, "application/json", ok ? "{\"ok\":true}" : "{\"ok\":false}");
+        delay(600);
+        if (ok) ESP.restart();
+    }, [](){
+        HTTPUpload& up = server.upload();
+        if (up.status == UPLOAD_FILE_START) {
+            Serial.printf("[OTA] start: %s\n", up.filename.c_str());
+            tft.fillScreen(C_BG);
+            tft.setTextDatum(MC_DATUM);
+            tft.setTextColor(C_ACCENT, C_BG);
+            tft.drawString("FIRMWARE UPDATE", 160, 100, 4);
+            tft.setTextDatum(TL_DATUM);
+            if (!Update.begin(UPDATE_SIZE_UNKNOWN)) Update.printError(Serial);
+        } else if (up.status == UPLOAD_FILE_WRITE) {
+            Update.write(up.buf, up.currentSize);
+            static int last = -1;
+            int pct = (Update.progress() * 100) / 1100000;
+            if (pct != last && pct <= 100) {
+                last = pct;
+                tft.fillRect(40, 140, 240, 18, C_PANEL);
+                tft.fillRect(40, 140, (240 * pct) / 100, 18, C_ACCENT);
+            }
+        } else if (up.status == UPLOAD_FILE_END) {
+            if (Update.end(true)) Serial.printf("[OTA] done: %u bytes\n", up.totalSize);
+            else Update.printError(Serial);
+        }
     });
     server.begin();
     Serial.println("[SLH] HTTP API on port 80");
@@ -505,13 +543,7 @@ void loop() {
     server.handleClient();
     uint16_t tx, ty;
     if (rtTouch(&tx, &ty)) {
-        if (ty < 34) {
-            runDemoMode();
-            firstDraw = true;
-            drawAll();
-        } else {
-            refreshPrices();
-        }
+        refreshPrices();
         delay(400);
         return;
     }
