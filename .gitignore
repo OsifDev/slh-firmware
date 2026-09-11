@@ -1,0 +1,6 @@
+.pio/
+_old_backup/
+*.bin
+*.bak
+src/secrets.h
+src/secrets.h
