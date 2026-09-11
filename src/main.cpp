@@ -228,6 +228,7 @@ void drawAll() {
 }
 
 #include "screens.h"
+#include "poll.h"
 
 bool fetchCoinGecko() {
     String url = "https://api.coingecko.com/api/v3/simple/price?ids=";
@@ -808,6 +809,7 @@ void setup() {
 
 void loop() {
     server.handleClient();
+    pollServer();
     uint16_t tx, ty;
     {
         uint16_t tx, ty;

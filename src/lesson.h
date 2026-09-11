@@ -18,12 +18,24 @@ static inline uint16_t rgb332_to_565(uint8_t px) {
 void drawLessonPage(int n) {
     if (n < 0 || n >= (int)LESSON_COUNT) n = 0;
     const uint8_t* src = LESSON_PAGES[n];
+    const uint32_t len = LESSON_SIZES[n];
     static uint16_t rowBuf[320];
-    for (int y = 0; y < (int)LESSON_H; y++) {
-        for (int x = 0; x < (int)LESSON_W; x++) {
-            rowBuf[x] = rgb332_to_565(pgm_read_byte(&src[y * LESSON_W + x]));
+    uint32_t si = 0;
+    int x = 0, y = 0;
+    while (si + 1 < len && y < (int)LESSON_H) {
+        uint8_t run = pgm_read_byte(&src[si]);
+        uint8_t val = pgm_read_byte(&src[si + 1]);
+        si += 2;
+        uint16_t c = rgb332_to_565(val);
+        while (run--) {
+            rowBuf[x++] = c;
+            if (x >= (int)LESSON_W) {
+                tft.pushImage(0, LESSON_TOP + y, LESSON_W, 1, rowBuf);
+                x = 0;
+                y++;
+                if (y >= (int)LESSON_H) break;
+            }
         }
-        tft.pushImage(0, LESSON_TOP + y, LESSON_W, 1, rowBuf);
     }
     tft.fillRect(0, 200, 320, 40, C_BG);
     tft.setTextDatum(MC_DATUM);
