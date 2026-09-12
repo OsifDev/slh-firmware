@@ -1199,11 +1199,13 @@ void setup() {
     drawStatus(WiFi.localIP().toString(), C_UP);
     delay(900);
     g_lastActivity = millis();
+    mqBegin();
     setupServer();
     refreshPrices();
 }
 
 void loop() {
+    mqLoop();
     server.handleClient();
     pollServer();
     uint16_t tx, ty;
