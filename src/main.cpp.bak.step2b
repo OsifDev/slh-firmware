@@ -1105,51 +1105,6 @@ void refreshPrices() {
     drawCurrentScreen();
 }
 
-void mqApply(const String& cmd) {
-  if (cmd == "ping") {
-    mqReply("pong " + WiFi.localIP().toString());
-    return;
-  }
-  if (cmd == "status") {
-    const char* sn = "?";
-    switch (g_currentScreen) {
-      case SCR_PRICES: sn = "prices"; break;
-      case SCR_MARKET: sn = "market"; break;
-      case SCR_SETUP:  sn = "setup";  break;
-      case SCR_SHOW:   sn = "show";   break;
-      case SCR_HOME:   sn = "home";   break;
-      case SCR_LESSON: sn = "lesson"; break;
-    }
-    String s = "screen=";
-    s += sn;
-    s += " up=" + String(millis()/1000) + "s";
-    s += " heap=" + String(ESP.getFreeHeap());
-    mqReply(s);
-    return;
-  }
-  if (cmd == "refresh") {
-    lastRefresh = 0;
-    mqReply("refreshing");
-    return;
-  }
-  if (cmd.startsWith("screen ")) {
-    String t = cmd.substring(7); t.trim();
-    ScreenId to = g_currentScreen;
-    if      (t == "home")   to = SCR_HOME;
-    else if (t == "prices") to = SCR_PRICES;
-    else if (t == "market") to = SCR_MARKET;
-    else if (t == "setup")  to = SCR_SETUP;
-    else if (t == "show")   to = SCR_SHOW;
-    else if (t == "lesson") to = SCR_LESSON;
-    else { mqReply("unknown screen: " + t); return; }
-    g_currentScreen = to;
-    firstDraw = true;
-    drawCurrentScreen();
-    mqReply("screen=" + t);
-    return;
-  }
-  mqReply("unknown cmd: " + cmd);
-}
 void setup() {
     Serial.begin(115200);
     delay(300);
