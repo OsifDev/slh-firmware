@@ -17,6 +17,10 @@ WebServer server(80);
 
 #define AP_NAME       "SLH-TICKER"
 #include "secrets.h"
+#include "mqtt_link.h"
+WiFiClient   mqNet;
+PubSubClient mq(mqNet);
+String       mqBase = "";
 
 #define AP_PASSWORD   "slh12345"
 #define REFRESH_MS    60000UL
