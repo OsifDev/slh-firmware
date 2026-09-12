@@ -12,51 +12,48 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 2
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Cache PlatformIO
-        uses: actions/cache@v4
+      - uses: actions/cache@v4
         with:
           path: ~/.platformio
           key: pio-${{ hashFiles('platformio.ini') }}
-          restore-keys: pio-
 
       - name: Install PlatformIO
-        run: pip install platformio
+        run: python -m pip install --upgrade pip platformio
 
       - name: Write secrets.h
+        env:
+          WIFI_SSID: ${{ secrets.WIFI_SSID }}
+          WIFI_PASS: ${{ secrets.WIFI_PASS }}
         run: |
-          cat > src/secrets.h <<EOF
-          #define WIFI_SSID  "${{ secrets.WIFI_SSID }}"
-          #define WIFI_PASS  "${{ secrets.WIFI_PASS }}"
-          #define OWNER_NAME "OSIF"
-          EOF
+          printf '#define WIFI_SSID  "%s"\n' "$WIFI_SSID"  > src/secrets.h
+          printf '#define WIFI_PASS  "%s"\n' "$WIFI_PASS" >> src/secrets.h
+          printf '#define OWNER_NAME "OSIF"\n'            >> src/secrets.h
+          cat src/secrets.h
 
-      - name: Build firmware
+      - name: Build
         run: pio run -e esp32-2432s028
 
-      - name: Copy firmware.bin
+      - name: Stage firmware
         run: |
           mkdir -p firmware
           cp .pio/build/esp32-2432s028/firmware.bin firmware/firmware.bin
 
-      - name: Commit and push if changed
+      - name: Commit if changed
         run: |
-          git config user.name "github-actions[bot]"
+          git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add firmware/firmware.bin
           if git diff --staged --quiet; then
-            echo "firmware.bin unchanged ? nothing to commit"
+            echo "no change"
           else
             git commit -m "build: firmware.bin [skip-build]"
             git push
