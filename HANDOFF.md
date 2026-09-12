@@ -160,3 +160,28 @@ signals, no direction arrows. A 30 minute move on BTC is roughly the
 size of the fees. What it shows instead: day range, position in that
 range, volatility, fees as a share of the available move, and risk
 per $1000 at different stop sizes. The student decides.
+## Update 2026-09-12 evening — MQTT + cloud OTA live
+
+Both devices on c2af79e. MQTT bridge to bot works.
+
+Devices (DHCP renewed — IPs changed):
+  ESP_14335C6C32C0  ->  10.0.0.2  (MAC 14:33:5C:6C:32:C0)
+  ESP_14335C6C8140  ->  10.0.0.3  (MAC 14:33:5C:6C:81:40)
+
+Verified commands (Telegram):
+  /esp_ping <id>   ->  pong <ip>           (works both)
+
+Firmware supports new MQTT command:
+  "ota <url>"      -> HTTP download + self-flash + restart
+  (bot-side /esp_ota not yet implemented)
+
+Security debt (does NOT block testing, DOES block shipping):
+  broker.hivemq.com is public. Topic = slh/esp/<MAC>.
+  Anyone who guesses the MAC can send commands including ota <url>.
+  Before any external user: private broker with auth, or shared secret.
+
+Open issues:
+  - bot does not have /esp_status or /esp_screen (only /esp_ping)
+  - OWNER_NAME duplicated at src/main.cpp lines ~276-277 (cosmetic)
+  - touch still broken (hardware suspected) — unchanged
+
