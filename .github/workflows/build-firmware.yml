@@ -1,0 +1,63 @@
+name: Build Firmware
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'firmware/**'
+
+jobs:
+  build:
+    if: "!contains(github.event.head_commit.message, '[skip-build]')"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-${{ hashFiles('platformio.ini') }}
+          restore-keys: pio-
+
+      - name: Install PlatformIO
+        run: pip install platformio
+
+      - name: Write secrets.h
+        run: |
+          cat > src/secrets.h <<EOF
+          #define WIFI_SSID  "${{ secrets.WIFI_SSID }}"
+          #define WIFI_PASS  "${{ secrets.WIFI_PASS }}"
+          #define OWNER_NAME "OSIF"
+          EOF
+
+      - name: Build firmware
+        run: pio run -e esp32-2432s028
+
+      - name: Copy firmware.bin
+        run: |
+          mkdir -p firmware
+          cp .pio/build/esp32-2432s028/firmware.bin firmware/firmware.bin
+
+      - name: Commit and push if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add firmware/firmware.bin
+          if git diff --staged --quiet; then
+            echo "firmware.bin unchanged ? nothing to commit"
+          else
+            git commit -m "build: firmware.bin [skip-build]"
+            git push
+          fi
