@@ -1115,6 +1115,7 @@ void mqRunOta(const String& url) {
   WiFiClientSecure sec;
   if (url.startsWith("https://")) { sec.setInsecure(); http.begin(sec, url); }
   else                             { http.begin(plain, url); }
+  http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
   int code = http.GET();
   if (code != 200) { Serial.printf("[OTA] http %d\n", code); http.end(); return; }
   int len = http.getSize();
