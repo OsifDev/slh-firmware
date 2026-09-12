@@ -1,3 +1,9 @@
+#ifndef OWNER_NAME
+#define OWNER_NAME "SLH"
+#endif
+#ifndef OWNER_NAME
+#define OWNER_NAME "SLH"
+#endif
 #pragma once
 enum ScreenId { SCR_PRICES = 0, SCR_MARKET, SCR_SETUP, SCR_SHOW, SCR_LESSON, SCR_HOME, SCR_COUNT };
 ScreenId g_currentScreen = SCR_HOME;
@@ -37,6 +43,10 @@ static void drawScreenBar(ScreenId s, const char* name) {
     tft.setTextDatum(ML_DATUM);
     tft.setTextColor(C_ACCENT, C_PANEL);
     tft.drawString("SLH", 42, 17, 4);
+    tft.setTextDatum(MR_DATUM);
+    tft.setTextColor(C_GOLD, C_PANEL);
+    tft.drawString(OWNER_NAME, 314, 17, 2);
+    tft.setTextDatum(ML_DATUM);
     tft.setTextColor(C_DIM, C_PANEL);
     tft.drawString(name, 96, 17, 2);
     tft.setTextDatum(MR_DATUM);

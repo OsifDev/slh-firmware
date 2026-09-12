@@ -1,10 +1,17 @@
 ﻿param([string]$esp = "10.0.0.6")
+Write-Host ""
+Write-Host "   ####  #     #   #   " -ForegroundColor Cyan
+Write-Host "  #      #     #   #   " -ForegroundColor Cyan
+Write-Host "   ###   #     #####   FIRMWARE FLASH" -ForegroundColor Cyan
+Write-Host "      #  #     #   #   " -ForegroundColor Cyan
+Write-Host "  ####   ##### #   #   target: " -NoNewline -ForegroundColor Cyan
+Write-Host $esp -ForegroundColor Yellow
+Write-Host ""
+$t0 = Get-Date
 $bin = Join-Path $PSScriptRoot ".pio\build\esp32-2432s028\firmware.bin"
-Write-Host "building..." -ForegroundColor Cyan
 pio run
 if ($LASTEXITCODE -ne 0) { Write-Host "BUILD FAILED" -ForegroundColor Red; exit 1 }
 $size = (Get-Item $bin).Length
-Write-Host "uploading $([math]::Round($size/1024))KB to $esp ..." -ForegroundColor Cyan
 $b = "----slhboundary" + [guid]::NewGuid().ToString("N")
 $enc = [System.Text.Encoding]::GetEncoding("iso-8859-1")
 $head = "--$b`r`nContent-Disposition: form-data; name=`"f`"; filename=`"firmware.bin`"`r`nContent-Type: application/octet-stream`r`n`r`n"
@@ -29,7 +36,6 @@ try {
   Write-Host ("device said: " + $sr.ReadToEnd()) -ForegroundColor Green
   $sr.Close(); $resp.Close()
 } catch { Write-Host "OTA FAILED: $($_.Exception.Message)" -ForegroundColor Red; exit 1 }
-Write-Host "rebooting..." -ForegroundColor Cyan
 Start-Sleep 14
 try {
   $s = (Invoke-WebRequest -UseBasicParsing "http://$esp/state" -TimeoutSec 10).Content | ConvertFrom-Json

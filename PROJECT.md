@@ -161,3 +161,9 @@ Build strategy from this data, not the other way around.
 
 
 
+
+12. Use Edit-Src from edit-helper.ps1 for every source edit.
+    Plain .Replace() fails silently when indentation does not match,
+    and you end up flashing unchanged code and wondering why nothing
+    happened. Edit-Src reports NOT FOUND immediately.
+

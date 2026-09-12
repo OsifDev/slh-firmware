@@ -7,10 +7,9 @@
 #include <TFT_eSPI.h>
 #include "rawtouch.h"
 SPIClass rtSPI(VSPI);
-int rtCal[4] = {3204, 740, 3095, 1355};
+int rtCal[4] = {3700, 350, 3600, 400};
 #include "demo.h"
 #include <WebServer.h>
-#include <Update.h>
 WebServer server(80);
 
 #define AP_NAME       "SLH-TICKER"
@@ -33,21 +32,6 @@ uint16_t touchCal[5] = { 1169, 2749, 837, 2958, 7 };
 #define C_DOWN      0xF9A6
 #define C_GOLD      0xFEA0
 
-// --- screensaver state ---
-static unsigned long g_lastActivity  = 0;
-static bool          g_saverOn       = true;
-static bool          g_saverActive   = false;
-static unsigned long g_saverLastFlip = 0;
-static const unsigned long SAVER_IDLE_MS  = 90000UL;
-static const unsigned long SAVER_CYCLE_MS = 20000UL;
-
-static bool          g_touchWasDown  = false;
-static uint16_t      g_lastTx      = 0;
-static uint16_t      g_lastTy      = 0;
-static unsigned long g_lastTxMs    = 0;
-static unsigned long g_lastTouchMs   = 0;
-static const unsigned long TOUCH_COOLDOWN_MS = 350UL;
-
 TFT_eSPI tft = TFT_eSPI();
 
 struct Coin {
@@ -56,19 +40,15 @@ struct Coin {
     const char* binanceSym;
     float       price;
     float       change24h;
-    float       high24;
-    float       low24;
-    float       volume;
-    int         trades;
     bool        valid;
 };
 
 Coin coins[] = {
-    { "BTC", "bitcoin",     "BTCUSDT", 0, 0, 0, 0, 0, 0, false },
-    { "ETH", "ethereum",    "ETHUSDT", 0, 0, 0, 0, 0, 0, false },
-    { "BNB", "binancecoin", "BNBUSDT", 0, 0, 0, 0, 0, 0, false },
+    { "BTC", "bitcoin",     "BTCUSDT", 0, 0, false },
+    { "ETH", "ethereum",    "ETHUSDT", 0, 0, false },
+    { "BNB", "binancecoin", "BNBUSDT", 0, 0, false },
 #if SLH_ENABLED
-    { "SLH", nullptr,       nullptr,   0, 0, 0, 0, 0, 0, false },
+    { "SLH", nullptr,       nullptr,   0, 0, false },
 #endif
 };
 const int COIN_COUNT = sizeof(coins) / sizeof(coins[0]);
@@ -82,13 +62,6 @@ unsigned long lastRefresh   = 0;
 unsigned long lastSuccessMs = 0;
 String        sourceLabel   = "--";
 bool          firstDraw     = true;
-
-// 0=prices 1=market 2=setup
-int  screenMode = 0;
-int  setupCoin  = 0;
-const char* SCREEN_NAMES[3] = {"prices", "market", "setup"};
-void drawMarket();
-void drawSetup();
 
 String fmtPrice(float p) {
     if (p <= 0)      return "--";
@@ -177,16 +150,13 @@ void drawFrame() {
     tft.setTextColor(C_ACCENT, C_PANEL);
     tft.drawString("SLH", 42, 17, 4);
     tft.setTextColor(C_DIM, C_PANEL);
-    tft.drawString("PRICES", 96, 17, 2);
-    tft.setTextDatum(MR_DATUM);
-    tft.setTextColor(C_GOLD, C_PANEL);
-    tft.drawString("1/3", 312, 17, 2);
+    tft.drawString("CRYPTO", 92, 17, 2);
     tft.setTextDatum(TL_DATUM);
 }
 
 void drawRow(int index, const Coin& c) {
-    const int top = 34 + index * 38;
-    const int h   = 34;
+    const int top = 42 + index * 43;
+    const int h   = 39;
     tft.fillRoundRect(6, top, 308, h, 4, C_PANEL);
     uint16_t stripe = (strcmp(c.symbol, "SLH") == 0) ? C_GOLD : C_ACCENT;
     tft.fillRect(6, top, 3, h, stripe);
@@ -222,16 +192,11 @@ void drawRow(int index, const Coin& c) {
 }
 
 void drawAll() {
-    if (screenMode == 1) { drawMarket(); return; }
-    if (screenMode == 2) { drawSetup();  return; }
     if (firstDraw) { drawFrame(); firstDraw = false; }
     for (int i = 0; i < COIN_COUNT; i++) drawRow(i, coins[i]);
-    // drawStatus removed - navbar is the footer now. Age is in /state.
+    String line = sourceLabel + "  |  " + fmtAge(lastSuccessMs);
+    drawStatus(line, (WiFi.status() == WL_CONNECTED) ? C_DIM : C_DOWN);
 }
-
-#include "screens.h"
-#include "navbar.h"
-#include "poll.h"
 
 bool fetchCoinGecko() {
     String url = "https://api.coingecko.com/api/v3/simple/price?ids=";
@@ -399,14 +364,13 @@ String buildStateJson() {
     j += "\"free_heap\":" + String(ESP.getFreeHeap()) + ",";
     j += "\"chip\":\"" + String(ESP.getChipModel()) + "\"";
     j += "},";
-    j += "\"screen\":\"" + String(SCREEN_NAMES[screenMode]) + "\",";
     j += "\"source\":\"" + sourceLabel + "\",";
     j += "\"age_s\":" + String(lastSuccessMs ? (millis()-lastSuccessMs)/1000 : 0) + ",";
     j += "\"touch\":{";
     { uint16_t tx, ty; bool hit = tft.getTouch(&tx, &ty);
       j += "\"pressed\":"; j += (hit ? "true" : "false");
       j += ",\"x\":" + String(hit ? tx : 0) + ",\"y\":" + String(hit ? ty : 0);
-      j += ",\"cal\":[" + String(rtCal[0]) + "," + String(rtCal[1]) + "," + String(rtCal[2]) + "," + String(rtCal[3]) + "]"; }
+      j += ",\"cal\":["; for (int k=0;k<5;k++){ j += String(touchCal[k]); if(k<4) j += ","; } j += "]"; }
     j += "},";
     j += "\"rows\":[";
     for (int i = 0; i < COIN_COUNT; i++) {
@@ -415,16 +379,6 @@ String buildStateJson() {
         j += ",\"price\":" + String(coins[i].price, 6);
         j += ",\"change_24h\":" + String(coins[i].change24h, 3);
         j += ",\"valid\":"; j += (coins[i].valid ? "true" : "false");
-        j += ",\"high24\":" + String(coins[i].high24, 2);
-        j += ",\"low24\":" + String(coins[i].low24, 2);
-        j += ",\"volume\":" + String(coins[i].volume, 1);
-        j += ",\"trades\":" + String(coins[i].trades);
-        if (coins[i].high24 > coins[i].low24) {
-            float rng = coins[i].high24 - coins[i].low24;
-            j += ",\"range_pct\":" + String(rng / coins[i].low24 * 100.0f, 2);
-            j += ",\"pos_in_range\":" + String((coins[i].price - coins[i].low24) / rng * 100.0f, 1);
-        } else { j += ",\"range_pct\":0,\"pos_in_range\":0"; }
-
         j += ",\"spark\":";
         if (sparkReady[i]) {
             j += "[";
@@ -441,71 +395,7 @@ void setupServer() {
     server.on("/", [](){ server.send(200, "application/json", buildStateJson()); });
     server.on("/state", [](){ server.send(200, "application/json", buildStateJson()); });
     server.on("/refresh", [](){ server.send(200, "application/json", "{\"ok\":true}"); lastRefresh = 0; });
-    server.on("/screen", [](){
-        String to = server.arg("to");
-        auto nameOf = [](ScreenId s) -> String {
-            switch (s) {
-                case SCR_PRICES: return "prices";
-                case SCR_MARKET: return "market";
-                case SCR_SETUP:  return "setup";
-                case SCR_SHOW:   return "show";
-                case SCR_HOME:   return "home";
-                case SCR_LESSON: return "lesson";
-                default:         return "unknown";
-            }
-        };
-        if (to.length() == 0) {
-            String r = "{\"current\":\"" + nameOf(g_currentScreen)
-                     + "\",\"all\":[\"home\",\"prices\",\"market\",\"setup\",\"show\",\"lesson\"]}";
-            server.send(200, "application/json", r);
-            return;
-        }
-        ScreenId target = g_currentScreen;
-        if      (to == "prices") target = SCR_PRICES;
-        else if (to == "market") target = SCR_MARKET;
-        else if (to == "setup")  target = SCR_SETUP;
-        else if (to == "show")   target = SCR_SHOW;
-        else if (to == "home")   target = SCR_HOME;
-        else if (to == "lesson") { target = SCR_LESSON; g_lessonPage = 0; }
-        else if (to == "next")   target = (ScreenId)(((int)g_currentScreen + 1) % (int)SCR_COUNT);
-        else { server.send(400, "application/json", "{\"error\":\"unknown\"}"); return; }
-        g_currentScreen = target;
-        if (target == SCR_PRICES) firstDraw = true;
-        drawCurrentScreen();
-        String r = "{\"ok\":true,\"screen\":\"" + nameOf(target) + "\"}";
-        server.send(200, "application/json", r);
-    });
-    server.on("/lesson", [](){
-        String p = server.arg("page");
-        if (p.length() == 0) {
-            server.send(200, "application/json",
-                "{\"page\":" + String(g_lessonPage) + ",\"count\":" + String(LESSON_COUNT) + "}");
-            return;
-        }
-        int n = p.toInt();
-        if (n < 0 || n >= LESSON_COUNT) {
-            server.send(400, "application/json", "{\"error\":\"range\"}");
-            return;
-        }
-        g_lessonPage = n;
-        g_currentScreen = SCR_LESSON;
-        drawCurrentScreen();
-        server.send(200, "application/json",
-            "{\"ok\":true,\"page\":" + String(n) + "}");
-    });    server.on("/backlight", [](){
-        String p = server.arg("pct");
-        static uint8_t blPct = 100;
-        if (p.length() == 0) {
-            server.send(200, "application/json", "{\"pct\":" + String(blPct) + "}");
-            return;
-        }
-        int v = p.toInt();
-        if (v < 5) v = 5;
-        if (v > 100) v = 100;
-        blPct = (uint8_t)v;
-        ledcWrite(0, (v * 255) / 100);
-        server.send(200, "application/json", "{\"ok\":true,\"pct\":" + String(v) + "}");
-    });    server.on("/touch", [](){
+    server.on("/touch", [](){
         uint16_t rx, ry, rz, sx, sy;
         bool valid = rtRaw(&rx, &ry, &rz);
         bool mapped = rtTouch(&sx, &sy);
@@ -515,165 +405,21 @@ void setupServer() {
         r += ",\"cal\":[" + String(rtCal[0]) + "," + String(rtCal[1]) + "," + String(rtCal[2]) + "," + String(rtCal[3]) + "]}";
         server.send(200, "application/json", r);
     });
-    server.on("/lasttouch", [](){
-        unsigned long age = (g_lastTxMs == 0) ? 999999UL : (millis() - g_lastTxMs);
-        String r = "{\"x\":" + String(g_lastTx);
-        r += ",\"y\":" + String(g_lastTy);
-        r += ",\"age_ms\":" + String(age);
-        r += ",\"on_navbar\":" + String((g_lastTy >= 196) ? "true" : "false");
-        r += "}";
-        server.send(200, "application/json", r);
-    });
-
-    server.on("/touchtest", [](){
-        String r = "{\"detects\":[";
-        bool first = true;
-        unsigned long t0 = millis();
-        while (millis() - t0 < 15000) {
-            uint16_t sx, sy;
-            if (rtTouch(&sx, &sy)) {
-                if (!first) r += ",";
-                r += "{\"t\":" + String(millis()-t0) + ",\"x\":" + String(sx) + ",\"y\":" + String(sy) + "}";
-                first = false;
-            }
-            delay(50);
-        }
-        r += "]}";
-        server.send(200, "application/json", r);
-    });
-
-    server.on("/waittouch", [](){
-        String r = "{\"events\":[";
-        bool first = true;
-        unsigned long t0 = millis();
-        while (millis() - t0 < 20000) {
-            uint16_t sx, sy;
-            rtSPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE0));
-            rtRead(0xB1);
-            rtRead(0x91);
-            uint16_t x = rtRead(0x91);
-            rtRead(0xD1);
-            uint16_t y = rtRead(0xD1);
-            rtSPI.endTransaction();
-            if (x > 100 && x < 4000 && y > 100 && y < 4000) {
-                if (!first) r += ",";
-                r += "{\"t\":" + String(millis()-t0) + ",\"x\":" + String(x) + ",\"y\":" + String(y) + "}";
-                first = false;
-            }
-            delay(150);
-        }
-        r += "]}";
-        server.send(200, "application/json", r);
-    });
-
     server.on("/rawdump", [](){
         String r = "{\"samples\":[";
-        uint16_t xmin = 4095, xmax = 0, ymin = 4095, ymax = 0;
-        long xsum = 0, ysum = 0;
-        int good = 0;
-        for (int n = 0; n < 60; n++) {
-            rtSPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE0));
-            rtRead(0xB1);
+        rtSPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE0));
+        for (int n = 0; n < 10; n++) {
+            uint16_t z = rtRead(0xB1);
             rtRead(0x91);
             uint16_t x = rtRead(0x91);
             rtRead(0xD1);
             uint16_t y = rtRead(0xD1);
-            rtSPI.endTransaction();
             if (n) r += ",";
-            r += "{\"x\":" + String(x) + ",\"y\":" + String(y) + "}";
-            if (x > 100 && x < 4000 && y > 100 && y < 4000) {
-                xsum += x; ysum += y; good++;
-                if (x < xmin) xmin = x; if (x > xmax) xmax = x;
-                if (y < ymin) ymin = y; if (y > ymax) ymax = y;
-            }
-            delay(200);
+            r += "{\"x\":" + String(x) + ",\"y\":" + String(y) + ",\"z\":" + String(z) + "}";
+            delayMicroseconds(300);
         }
-        r += "],\"good\":" + String(good);
-        if (good > 0) {
-            r += ",\"xmin\":" + String(xmin) + ",\"xmax\":" + String(xmax);
-            r += ",\"ymin\":" + String(ymin) + ",\"ymax\":" + String(ymax);
-            r += ",\"xavg\":" + String(xsum/good) + ",\"yavg\":" + String(ysum/good);
-        }
-        r += "}";
-        server.send(200, "application/json", r);
-    });
-    server.on("/screen", [](){
-        if (server.hasArg("n")) { screenMode = server.arg("n").toInt() % 3; firstDraw = true; drawAll(); }
-        server.send(200, "application/json", "{\"screen\":\"" + String(SCREEN_NAMES[screenMode]) + "\"}");
-    });
-    server.on("/view", [](){
-        String v = "{";
-        auto nm = [](ScreenId s) -> String {
-            switch (s) {
-                case SCR_PRICES: return "prices";
-                case SCR_MARKET: return "market";
-                case SCR_SETUP:  return "setup";
-                case SCR_SHOW:   return "show";
-                case SCR_LESSON: return "lesson";
-                default:         return "home";
-            }
-        };
-        v += "\"screen\":\"" + nm(g_currentScreen) + "\",";
-        v += "\"lines\":[";
-        if (g_currentScreen == SCR_LESSON) {
-            v += "\"LESSON PAGE " + String(g_lessonPage + 1) + " of " + String(LESSON_COUNT) + "\",";
-            v += "\"(hebrew bitmap - not text)\"";
-        } else if (g_currentScreen == SCR_HOME) {
-            v += "\"SLH OS - HOME\",\"PRICES  SETUP  SHOW\",\"LESSON  MARKET  WALLET\"";
-        } else if (g_currentScreen == SCR_SHOW) {
-            v += "\"SLH PRESALE\",\"ILS 444\"";
-        } else {
-            for (int i = 0; i < COIN_COUNT; i++) {
-                if (i) v += ",";
-                String row = String(coins[i].symbol) + "  ";
-                if (!coins[i].valid) row += "--";
-                else if (!strcmp(coins[i].symbol, "SLH")) row += "ILS 444  PRESALE";
-                else {
-                    row += "$" + String(coins[i].price, 2);
-                    row += "  " + String(coins[i].change24h, 2) + "%";
-                    if (g_currentScreen == SCR_MARKET && coins[i].high24 > coins[i].low24) {
-                        float rg = coins[i].high24 - coins[i].low24;
-                        int pos = (int)((coins[i].price - coins[i].low24) / rg * 100.0f);
-                        row += "  pos " + String(pos) + "%";
-                        row += "  rng " + String(rg / coins[i].low24 * 100.0f, 2) + "%";
-                    }
-                }
-                v += "\"" + row + "\"";
-            }
-        }
-        v += "],";
-        v += "\"source\":\"" + sourceLabel + "\",";
-        v += "\"age_s\":" + String(lastSuccessMs ? (millis()-lastSuccessMs)/1000 : 0);
-        v += "}";
-        server.send(200, "application/json", v);
-    });
-    server.on("/layout", [](){
-        String r = "{\"screen\":" + String((int)g_currentScreen);
-        r += ",\"regions\":[";
-        r += "{\"n\":\"header\",\"y\":0,\"h\":34}";
-        if (g_currentScreen == SCR_HOME) {
-            r += ",{\"n\":\"grid_row1\",\"y\":42,\"h\":84}";
-            r += ",{\"n\":\"grid_row2\",\"y\":130,\"h\":84}";
-            r += ",{\"n\":\"tabbar\",\"y\":216,\"h\":24}";
-        } else {
-            r += ",{\"n\":\"content\",\"y\":36,\"h\":" + String(NAV_TOP - 36) + "}";
-            r += ",{\"n\":\"navbar\",\"y\":" + String(NAV_TOP) + ",\"h\":" + String(NAV_H) + "}";
-        }
-        r += "],\"overlaps\":[";
-        bool first = true;
-        if (g_currentScreen == SCR_HOME && 130 + 84 > 216) {
-            r += "{\"a\":\"grid_row2\",\"b\":\"tabbar\"}"; first = false;
-        }
-        if (g_currentScreen == SCR_MARKET) {
-            int need = 36 + COIN_COUNT * 40;
-            if (need > NAV_TOP) {
-                if (!first) r += ",";
-                r += "{\"a\":\"market_rows\",\"b\":\"navbar\",\"by\":" + String(need - NAV_TOP) + "}";
-                first = false;
-            }
-        }
-        r += "],\"nav_top\":" + String(NAV_TOP);
-        r += ",\"screen_h\":240}";
+        rtSPI.endTransaction();
+        r += "]}";
         server.send(200, "application/json", r);
     });
     server.on("/setcal", [](){
@@ -684,201 +430,8 @@ void setupServer() {
         String r = "{\"cal\":[" + String(rtCal[0]) + "," + String(rtCal[1]) + "," + String(rtCal[2]) + "," + String(rtCal[3]) + "]}";
         server.send(200, "application/json", r);
     });
-    server.on("/ota", HTTP_GET, [](){
-        server.send(200, "text/html",
-          "<html><body style='font-family:sans-serif;background:#111;color:#eee;padding:30px'>"
-          "<h2>SLH Firmware Update</h2>"
-          "<form method='POST' action='/update' enctype='multipart/form-data'>"
-          "<input type='file' name='f'><br><br>"
-          "<input type='submit' value='Upload firmware.bin'></form></body></html>");
-    });
-    server.on("/update", HTTP_POST, [](){
-        bool ok = !Update.hasError();
-        server.send(200, "application/json", ok ? "{\"ok\":true}" : "{\"ok\":false}");
-        delay(600);
-        if (ok) ESP.restart();
-    }, [](){
-        HTTPUpload& up = server.upload();
-        if (up.status == UPLOAD_FILE_START) {
-            Serial.printf("[OTA] start: %s\n", up.filename.c_str());
-            tft.fillScreen(C_BG);
-            tft.setTextDatum(MC_DATUM);
-            tft.setTextColor(C_ACCENT, C_BG);
-            tft.drawString("FIRMWARE UPDATE", 160, 100, 4);
-            tft.setTextDatum(TL_DATUM);
-            if (!Update.begin(UPDATE_SIZE_UNKNOWN)) Update.printError(Serial);
-        } else if (up.status == UPLOAD_FILE_WRITE) {
-            Update.write(up.buf, up.currentSize);
-            static int last = -1;
-            int pct = (Update.progress() * 100) / 1100000;
-            if (pct != last && pct <= 100) {
-                last = pct;
-                tft.fillRect(40, 140, 240, 18, C_PANEL);
-                tft.fillRect(40, 140, (240 * pct) / 100, 18, C_ACCENT);
-            }
-        } else if (up.status == UPLOAD_FILE_END) {
-            if (Update.end(true)) Serial.printf("[OTA] done: %u bytes\n", up.totalSize);
-            else Update.printError(Serial);
-        }
-    });
     server.begin();
     Serial.println("[SLH] HTTP API on port 80");
-}
-
-void fetchStats() {
-    for (int i = 0; i < COIN_COUNT; i++) {
-        if (!coins[i].binanceSym) continue;
-        String url = "https://api.binance.com/api/v3/ticker/24hr?symbol=";
-        url += coins[i].binanceSym;
-        String body = httpGet(url.c_str(), 8000);
-        if (body.length() < 20) continue;
-        DynamicJsonDocument doc(3072);
-        if (deserializeJson(doc, body)) continue;
-        coins[i].high24  = String((const char*)(doc["highPrice"] | "0")).toFloat();
-        coins[i].low24   = String((const char*)(doc["lowPrice"]  | "0")).toFloat();
-        coins[i].volume  = String((const char*)(doc["volume"]    | "0")).toFloat();
-        coins[i].trades  = doc["count"]      | 0;
-        delay(120);
-    }
-}
-
-void drawMarket() {
-    tft.fillScreen(C_BG);
-    tft.fillRect(0, 0, 320, 28, C_PANEL);
-    tft.drawFastHLine(0, 28, 320, C_ACCENT);
-    tft.setTextDatum(ML_DATUM);
-    tft.setTextColor(C_ACCENT, C_PANEL);
-    tft.drawString("MARKET", 10, 14, 4);
-    tft.setTextColor(C_DIM, C_PANEL);
-    tft.drawString("24h context", 110, 14, 2);
-    tft.setTextDatum(TL_DATUM);
-
-    int y = 36;
-    for (int i = 0; i < COIN_COUNT; i++) {
-        if (!coins[i].binanceSym || coins[i].high24 <= coins[i].low24) continue;
-        float rng = coins[i].high24 - coins[i].low24;
-        float pct = rng / coins[i].low24 * 100.0f;
-        int pos = (int)((coins[i].price - coins[i].low24) / rng * 100.0f);
-        if (pos < 0) pos = 0; if (pos > 100) pos = 100;
-
-        tft.setTextColor(C_ACCENT, C_BG);
-        tft.drawString(coins[i].symbol, 10, y, 4);
-
-        uint16_t vc = (pct > 4) ? C_GOLD : ((pct > 2) ? C_TEXT : C_DIM);
-        tft.setTextDatum(MR_DATUM);
-        tft.setTextColor(vc, C_BG);
-        tft.drawString(String(pct, 2) + "% day", 310, y + 10, 2);
-        tft.setTextDatum(TL_DATUM);
-
-        int by = y + 26;
-        tft.drawRect(10, by, 300, 12, C_PANEL);
-        tft.fillRect(11, by + 1, 298, 10, C_PANEL);
-        int mx = 11 + (298 * pos) / 100;
-        uint16_t pc = (pos > 70) ? C_UP : ((pos < 30) ? C_DOWN : C_ACCENT);
-        tft.fillRect(mx - 2, by, 4, 12, pc);
-
-        tft.setTextColor(C_DIM, C_BG);
-        tft.drawString(String(pos) + "% of range", 10, by + 15, 2);
-        tft.setTextDatum(MR_DATUM);
-        tft.drawString("L " + String(coins[i].low24, 0) + "  H " + String(coins[i].high24, 0), 310, by + 20, 2);
-        tft.setTextDatum(TL_DATUM);
-
-        y += 66;
-    }
-    tft.setTextDatum(MC_DATUM);
-    tft.setTextColor(C_DIM, C_BG);
-    tft.drawString("tap to change screen", 160, 232, 2);
-    tft.setTextDatum(TL_DATUM);
-}
-
-void drawSetup() {
-    Coin& c = coins[setupCoin];
-    tft.fillScreen(C_BG);
-    tft.fillRect(0, 0, 320, 28, C_PANEL);
-    tft.drawFastHLine(0, 28, 320, C_ACCENT);
-    tft.setTextDatum(ML_DATUM);
-    tft.setTextColor(C_ACCENT, C_PANEL);
-    tft.drawString("SETUP", 10, 14, 4);
-    tft.setTextColor(C_GOLD, C_PANEL);
-    tft.drawString(c.symbol, 90, 14, 4);
-    tft.setTextColor(C_DIM, C_PANEL);
-    tft.drawString("risk per $1000", 150, 14, 2);
-    tft.setTextDatum(TL_DATUM);
-
-    if (c.high24 <= c.low24) {
-        tft.setTextColor(C_DIM, C_BG);
-        tft.drawString("no data yet", 20, 100, 4);
-        return;
-    }
-
-    float rng  = c.high24 - c.low24;
-    float move = rng / c.low24 * 100.0f;
-    int   pos  = (int)((c.price - c.low24) / rng * 100.0f);
-    if (pos < 0) pos = 0; if (pos > 100) pos = 100;
-
-    float spotFee = 0.20f;
-    float futFee  = 0.10f;
-    int spotShare = (int)(spotFee / move * 100.0f);
-    int futShare  = (int)(futFee  / move * 100.0f);
-
-    int y = 36;
-    tft.setTextColor(C_DIM, C_BG);  tft.drawString("day move", 12, y, 2);
-    tft.setTextColor(C_TEXT, C_BG); tft.drawString(String(move, 2) + "%", 120, y, 2);
-    y += 20;
-
-    tft.setTextColor(C_DIM, C_BG);  tft.drawString("spot fees", 12, y, 2);
-    tft.setTextColor(spotShare > 25 ? C_DOWN : C_TEXT, C_BG);
-    tft.drawString("0.20%  = " + String(spotShare) + "% of move", 120, y, 2);
-    y += 20;
-
-    tft.setTextColor(C_DIM, C_BG);  tft.drawString("futures", 12, y, 2);
-    tft.setTextColor(futShare > 25 ? C_DOWN : C_TEXT, C_BG);
-    tft.drawString("0.10%  = " + String(futShare) + "% of move", 120, y, 2);
-    y += 26;
-
-    tft.drawFastHLine(12, y, 296, C_PANEL);
-    y += 8;
-
-    tft.setTextColor(C_DIM, C_BG);  tft.drawString("stop 1%", 12, y, 2);
-    tft.setTextColor(C_TEXT, C_BG); tft.drawString("risk $10", 120, y, 2);
-    tft.setTextColor(C_DIM, C_BG);  tft.drawString("target 2:1 = $20", 210, y, 2);
-    y += 20;
-    tft.setTextColor(C_DIM, C_BG);  tft.drawString("stop 2%", 12, y, 2);
-    tft.setTextColor(C_TEXT, C_BG); tft.drawString("risk $20", 120, y, 2);
-    tft.setTextColor(C_DIM, C_BG);  tft.drawString("target 2:1 = $40", 210, y, 2);
-    y += 26;
-
-    tft.drawFastHLine(12, y, 296, C_PANEL);
-    y += 8;
-
-    if (pos > 70) {
-        tft.setTextColor(C_GOLD, C_BG);
-        tft.drawString("price near DAY HIGH (" + String(pos) + "%)", 12, y, 2);
-        y += 18;
-        tft.setTextColor(C_DIM, C_BG);
-        tft.drawString("long needs the high to break", 12, y, 2);
-        y += 16;
-        tft.drawString("short needs it to hold", 12, y, 2);
-    } else if (pos < 30) {
-        tft.setTextColor(C_GOLD, C_BG);
-        tft.drawString("price near DAY LOW (" + String(pos) + "%)", 12, y, 2);
-        y += 18;
-        tft.setTextColor(C_DIM, C_BG);
-        tft.drawString("short needs the low to break", 12, y, 2);
-        y += 16;
-        tft.drawString("long needs it to hold", 12, y, 2);
-    } else {
-        tft.setTextColor(C_ACCENT, C_BG);
-        tft.drawString("price MID range (" + String(pos) + "%)", 12, y, 2);
-        y += 18;
-        tft.setTextColor(C_DIM, C_BG);
-        tft.drawString("no edge from position alone", 12, y, 2);
-    }
-
-    tft.setTextDatum(MC_DATUM);
-    tft.setTextColor(C_DIM, C_BG);
-    tft.drawString("tap to change screen", 160, 232, 2);
-    tft.setTextDatum(TL_DATUM);
 }
 
 void refreshPrices() {
@@ -890,20 +443,19 @@ void refreshPrices() {
 #if SLH_ENABLED
     if (fetchSLH() && ok) sourceLabel += " + SLH";
 #endif
-    if (ok) { fetchStats(); lastSuccessMs = millis(); }
+    if (ok) lastSuccessMs = millis();
     static bool sparkOnce = false;
     if (!sparkOnce && ok) { fetchSparklines(); sparkOnce = true; }
     lastRefresh = millis();
-    drawCurrentScreen();
+    drawAll();
 }
 
 void setup() {
     Serial.begin(115200);
     delay(300);
     Serial.println("\n[SLH] Crypto Ticker booting");
-    ledcSetup(0, 5000, 8);
-    ledcAttachPin(TFT_BL, 0);
-    ledcWrite(0, 255);
+    pinMode(TFT_BL, OUTPUT);
+    digitalWrite(TFT_BL, HIGH);
     tft.init();
     tft.setRotation(1);
     tft.setSwapBytes(true);
@@ -945,82 +497,22 @@ void setup() {
     Serial.println(WiFi.localIP());
     drawStatus(WiFi.localIP().toString(), C_UP);
     delay(900);
-    g_lastActivity = millis();
     setupServer();
     refreshPrices();
 }
 
 void loop() {
     server.handleClient();
-    pollServer();
     uint16_t tx, ty;
-    {
-        uint16_t tx, ty;
-        bool touchDown = rtTouch(&tx, &ty);
-        if (touchDown) { g_lastTx = tx; g_lastTy = ty; g_lastTxMs = millis(); }
-        bool touchEdge = touchDown && !g_touchWasDown;
-        g_touchWasDown = touchDown;
-
-        if (touchEdge && (millis() - g_lastTouchMs) > TOUCH_COOLDOWN_MS) {
-            g_lastTouchMs = millis();
-            g_lastActivity = millis();
-            g_saverActive = false;
-            ledcWrite(0, 255);
-
-            int nav = navHit(tx, ty);
-            if (nav >= 0 && g_currentScreen != SCR_HOME) {
-                navFeedback(nav);
-                if (nav == 0) {
-                    ScreenId back = g_prevScreen;
-                    g_prevScreen = g_currentScreen;
-                    g_currentScreen = back;
-                } else if (nav == 1) {
-                    g_prevScreen = g_currentScreen;
-                    g_currentScreen = SCR_HOME;
-                } else {
-                    g_prevScreen = g_currentScreen;
-                    g_currentScreen = (ScreenId)(((int)g_currentScreen + 1) % (int)SCR_COUNT);
-                    if (g_currentScreen == SCR_HOME) g_currentScreen = SCR_PRICES;
-                }
-                if (g_currentScreen == SCR_PRICES) firstDraw = true;
-                if (g_currentScreen == SCR_LESSON) g_lessonPage = 0;
-                drawCurrentScreen();
-            } else if (g_currentScreen == SCR_HOME) {
-                ScreenId tgt = homeTouchHandler(tx, ty);
-                if (tgt < SCR_COUNT && tgt != g_currentScreen) {
-                    g_currentScreen = tgt;
-                    if (tgt == SCR_PRICES) firstDraw = true;
-                    if (tgt == SCR_LESSON) g_lessonPage = 0;
-                    drawCurrentScreen();
-                }
-            }
+    if (rtTouch(&tx, &ty)) {
+        if (ty < 34) {
+            runDemoMode();
+            firstDraw = true;
+            drawAll();
+        } else {
+            refreshPrices();
         }
-    }
-    if (g_saverOn) {
-        unsigned long idle = millis() - g_lastActivity;
-        if (!g_saverActive && idle >= SAVER_IDLE_MS) {
-            g_saverActive = true;
-            g_saverLastFlip = millis();
-            ledcWrite(0, 80);
-        }
-        if (g_saverActive) {
-            if (millis() - g_saverLastFlip >= SAVER_CYCLE_MS) {
-                g_saverLastFlip = millis();
-                // nextScreen disabled in saver mode - dim only
-            }
-            if (g_currentScreen == SCR_SHOW) updateShowScreen();
-            delay(30);
-            return;
-        }
-    }
-    if (g_currentScreen == SCR_SHOW) {
-        updateShowScreen();
-        delay(5);
-        return;
-    }
-    if (g_currentScreen == SCR_LESSON) {
-        updateLessonScreen();
-        delay(50);
+        delay(400);
         return;
     }
     if (millis() - lastRefresh >= REFRESH_MS) {
@@ -1030,20 +522,11 @@ void loop() {
         }
         refreshPrices();
     }
-    // 5s drawStatus removed - it was painting over the navbar
-    // Age is available via /state and /screen
+    static unsigned long lastTick = 0;
+    if (millis() - lastTick > 5000) {
+        lastTick = millis();
+        String line = sourceLabel + "  |  " + fmtAge(lastSuccessMs);
+        drawStatus(line, WiFi.status() == WL_CONNECTED ? C_DIM : C_DOWN);
+    }
     delay(50);
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
