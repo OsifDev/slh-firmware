@@ -124,6 +124,7 @@ String httpGet(const char* url, uint16_t timeoutMs = 8000) {
     http.setTimeout(timeoutMs);
     http.setConnectTimeout(timeoutMs);
     if (!http.begin(client, url)) return "";
+  http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
     int code = http.GET();
     String body = "";
     if (code == HTTP_CODE_OK) body = http.getString();
