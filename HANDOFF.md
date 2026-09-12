@@ -185,3 +185,36 @@ Open issues:
   - OWNER_NAME duplicated at src/main.cpp lines ~276-277 (cosmetic)
   - touch still broken (hardware suspected) — unchanged
 
+
+## Update 2026-09-12 night — CLOUD OTA COMPLETE
+
+Both devices on b75af36. Cloud OTA via Telegram WORKS end-to-end.
+
+Commits (slh-firmware):
+  b75af36  fix: follow redirects inside mqRunOta
+  3147545  fix: follow redirects in httpGet helper (bonus)
+  7ca1b0f  release: firmware/firmware.bin committed to repo for raw delivery
+
+Working OTA command (anywhere, no PC needed):
+  /esp_ota <device_id> https://raw.githubusercontent.com/OsifDev/slh-firmware/main/firmware/firmware.bin
+
+Why raw.githubusercontent and not GitHub Releases:
+  Releases redirect (302) from github.com to objects.githubusercontent.com.
+  ESP32 HTTPClient + WiFiClientSecure cannot complete TLS across that host change.
+  raw.githubusercontent.com returns 200 directly with valid SNI. Works.
+
+Workflow to ship firmware (still requires PC for build):
+  1. Edit src/main.cpp
+  2. pio run
+  3. Copy .pio\build\esp32-2432s028\firmware.bin  ->  firmware/firmware.bin
+  4. git add firmware/firmware.bin src/ && git commit && git push
+  5. In Telegram: /esp_ota <id> https://raw.githubusercontent.com/OsifDev/slh-firmware/main/firmware/firmware.bin
+
+Next step (not tonight):
+  GitHub Action to build firmware.bin on every push to main.
+  Then even the build does not need a PC powered on.
+
+Security debt unchanged:
+  broker.hivemq.com is public. Anyone knowing MAC can send ota <url>.
+  Before external users: private broker + auth, or signed payloads.
+
