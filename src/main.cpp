@@ -17,10 +17,6 @@ WebServer server(80);
 
 #define AP_NAME       "SLH-TICKER"
 #include "secrets.h"
-#include "mqtt_link.h"
-WiFiClient   mqNet;
-PubSubClient mq(mqNet);
-String       mqBase = "";
 
 #define AP_PASSWORD   "slh12345"
 #define REFRESH_MS    60000UL
@@ -282,6 +278,13 @@ void drawAll() {
 #include "screens.h"
 #include "navbar.h"
 #include "poll.h"
+
+#include <PubSubClient.h>
+// --- MQTT step 1: globals ---
+#include "mqtt_link.h"
+WiFiClient   mqNet;
+PubSubClient mq(mqNet);
+String       mqBase = "";
 
 bool fetchCoinGecko() {
     String url = "https://api.coingecko.com/api/v3/simple/price?ids=";
