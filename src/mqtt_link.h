@@ -27,13 +27,16 @@ inline void mqReply(const String& msg) {
   Serial.println("[MQTT] replied: " + msg);
 }
 
+String g_mqPending = "";
+
 inline void mqCallback(char* topic, byte* payload, unsigned int len) {
   String cmd = "";
   for (unsigned int i = 0; i < len; i++) cmd += (char)payload[i];
   cmd.trim();
-  Serial.println("[MQTT] cmd: " + cmd);
-  mqApply(cmd);
+  Serial.println("[MQTT] queued: " + cmd);
+  g_mqPending = cmd;
 }
+
 
 inline void mqBegin() {
   mqBase = "slh/esp/" + mqDeviceId();

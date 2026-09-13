@@ -794,6 +794,7 @@ void setupServer() {
             }
             server.handleClient();
     mqLoop();
+    if (g_mqPending.length()) { String c = g_mqPending; g_mqPending = ""; mqApply(c); }
             delay(20);
         }
         firstDraw = true;
