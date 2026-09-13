@@ -246,3 +246,20 @@ $1000 at different stop sizes. The student decides.
 
 The SETUP screen turning the fee line red on a quiet day is the most
 valuable thing this device does. It teaches when NOT to trade.
+
+## FOUND 2026-09-13: governance data structure
+
+Proposals live in db["governance"]["proposals"] as a LIST, not a dict.
+Each entry: id, status (open|approved), type, title.
+Currently 6 proposals, 2 open (ids 3 and 4).
+votes {} is empty; individual_votes has 4 entries.
+Other keys: agents_registry, sessions, task_map, rules, source_of_truth.
+
+Read it with:
+  /exec cd /app && python3 -c "import json;d=json.load(open(\"state/db.json\",encoding=\"utf-8\"));g=d[\"governance\"];print([(p[\"id\"],p[\"status\"],p[\"title\"][:40]) for p in g[\"proposals\"]])"
+
+The container has python3 but NOT curl. Fetch URLs with:
+  /exec python3 -c "import urllib.request;print(urllib.request.urlopen(URL,timeout=20).read().decode()[:3000])"
+
+Step 3 is now unblocked on data. It remains blocked on security:
+do not ship voting over the public broker.
