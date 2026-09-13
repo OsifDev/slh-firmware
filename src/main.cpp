@@ -9,7 +9,7 @@
 #include "drawtrack.h"
 #include "neurons.h"
 SPIClass rtSPI(VSPI);
-int rtCal[4] = {3204, 740, 3095, 1650};
+int rtCal[4] = {400, 3400, 800, 3000};
 #include "demo.h"
 #include <WebServer.h>
 #include <Update.h>
@@ -1157,7 +1157,7 @@ void setup() {
     // hold a finger on the screen during boot to recalibrate
     {
         uint16_t _x, _y;
-        if (tft.getTouch(&_x, &_y)) calibrateTouch();
+        // if (tft.getTouch(&_x, &_y)) calibrateTouch();  TFT_eSPI touch disabled - we use rtTouch
     }
     drawSplash();
     delay(1200);
@@ -1205,7 +1205,9 @@ void loop() {
         uint16_t tx, ty;
         bool touchDown = rtTouch(&tx, &ty);
         if (touchDown) { g_lastTx = tx; g_lastTy = ty; g_lastTxMs = millis(); }
-        bool touchEdge = touchDown && !g_touchWasDown;
+        static unsigned long lastUp = 0;
+        if (!touchDown) lastUp = millis();
+        bool touchEdge = touchDown && (millis() - lastUp) < 400 && !g_touchWasDown;
         g_touchWasDown = touchDown;
 
         if (touchEdge && (millis() - g_lastTouchMs) > TOUCH_COOLDOWN_MS) {
