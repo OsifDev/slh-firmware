@@ -30,7 +30,7 @@ flashing it. secrets.h is gitignored so each unit keeps its own.
 
 ## What is broken
 
-TOUCH. This burned most of 2026-09-12 and is still not solved.
+TOUCH. Resolved 2026-09-13: the code and wiring are correct. Board 2 (ZVIKA, MAC 81:40) reads touch perfectly with z 500-1500. Board 1 (OSIF, MAC 32:C0) returns all zeros - hardware fault, likely damaged during a scanner that wrote to input-only GPIOs. Same firmware, opposite result. Do not debug the driver.
 
 Facts established:
   - XPT2046 on CS=33, SPI on SCK 25 / MISO 39 / MOSI 32
@@ -217,4 +217,5 @@ Next step (not tonight):
 Security debt unchanged:
   broker.hivemq.com is public. Anyone knowing MAC can send ota <url>.
   Before external users: private broker + auth, or signed payloads.
+
 
