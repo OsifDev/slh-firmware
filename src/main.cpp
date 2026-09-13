@@ -1195,6 +1195,8 @@ void setup() {
 void loop() {
     server.handleClient();
     // pollServer();  disabled - endpoint does not exist, blocked the loop
+    mqLoop();
+    if (g_mqPending.length()) { String c = g_mqPending; g_mqPending = ""; mqApply(c); }
     uint16_t tx, ty;
     {
         uint16_t tx, ty;

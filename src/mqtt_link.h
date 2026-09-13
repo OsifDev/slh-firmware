@@ -47,6 +47,8 @@ inline void mqBegin() {
 
 inline void mqLoop() {
   if (WiFi.status() != WL_CONNECTED) return;
+  static unsigned long dbg = 0;
+  if (millis() - dbg > 5000) { dbg = millis(); Serial.printf("[MQ] loop wifi=%d conn=%d base=%s\n", WiFi.status(), mq.connected(), mqBase.c_str()); }
   if (!mq.connected()) {
     static unsigned long lastTry = 0;
     if (millis() - lastTry < 5000) return;
