@@ -5,9 +5,9 @@
 #define MQTT_HOST "broker.hivemq.com"
 #define MQTT_PORT 1883
 
-extern WiFiClient  mqNet;
+extern WiFiClient   mqNet;
 extern PubSubClient mq;
-extern String mqBase;
+extern String       mqBase;
 
 void mqApply(const String& cmd);
 
@@ -16,6 +16,15 @@ inline String mqDeviceId() {
   m.replace(":", "");
   m.toUpperCase();
   return "ESP_" + m;
+}
+
+inline void mqReply(const String& msg) {
+  if (!mq.connected()) return;
+  mq.publish((mqBase + "/response").c_str(), msg.c_str());
+  mq.loop();
+  delay(30);
+  mq.loop();
+  Serial.println("[MQTT] replied: " + msg);
 }
 
 inline void mqCallback(char* topic, byte* payload, unsigned int len) {
@@ -48,8 +57,4 @@ inline void mqLoop() {
     return;
   }
   mq.loop();
-}
-
-inline void mqReply(const String& msg) {
-  if (mq.connected()) mq.publish((mqBase + "/response").c_str(), msg.c_str());
 }

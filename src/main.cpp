@@ -387,6 +387,8 @@ void fetchSparklines() {
 }
 
 void drawSparkline(int i, int x, int y, int w, int h) {
+    if (i < 0 || i >= COIN_COUNT) return;
+    if (!sparkReady[i]) return;
     if (!sparkReady[i]) return;
     float lo = sparkData[i][0], hi = sparkData[i][0];
     for (int k = 1; k < SPARK_N; k++) {
@@ -1104,6 +1106,35 @@ void refreshPrices() {
     if (!sparkOnce && ok) { fetchSparklines(); sparkOnce = true; }
     lastRefresh = millis();
     drawCurrentScreen();
+}
+
+void mqApply(const String& cmd) {
+    if (cmd == "ping") { mqReply("pong " + WiFi.localIP().toString()); return; }
+    if (cmd == "status") {
+        String s = "screen=" + String(SCREEN_NAMES[(int)g_currentScreen]);
+        s += " up=" + String(millis()/1000) + "s heap=" + String(ESP.getFreeHeap());
+        mqReply(s);
+        return;
+    }
+    if (cmd == "refresh") { lastRefresh = 0; mqReply("refreshing"); return; }
+    if (cmd.startsWith("screen ")) {
+        String t = cmd.substring(7);
+        t.trim();
+        ScreenId to = g_currentScreen;
+        if      (t == "home")   to = SCR_HOME;
+        else if (t == "prices") to = SCR_PRICES;
+        else if (t == "market") to = SCR_MARKET;
+        else if (t == "setup")  to = SCR_SETUP;
+        else if (t == "show")   to = SCR_SHOW;
+        else if (t == "lesson") to = SCR_LESSON;
+        else { mqReply("unknown screen: " + t); return; }
+        g_currentScreen = to;
+        firstDraw = true;
+        drawCurrentScreen();
+        mqReply("screen=" + t);
+        return;
+    }
+    mqReply("unknown cmd: " + cmd);
 }
 
 void setup() {
