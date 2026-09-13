@@ -1195,6 +1195,8 @@ void setup() {
     mqBegin();
     clockBegin();
     refreshPrices();
+    for (int k = 0; k < 20 && !clockReady(); k++) delay(250);
+    Serial.println("[NTP] " + clockDate() + " " + clockTime());
 }
 
 void loop() {
