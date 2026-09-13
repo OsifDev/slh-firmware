@@ -1,5 +1,5 @@
 ﻿param([string]$cmd = "status", [string]$arg = "")
-$VIP = @{ "osif" = "10.0.0.4"; "zvika" = "10.0.0.6" }
+$VIP = @{ "osif" = "10.0.0.2"; "zvika" = "10.0.0.3" }
 function Hit($ip, $path) { try { return Invoke-RestMethod "http://$ip$path" -TimeoutSec 6 } catch { return $null } }
 switch ($cmd) {
   "status" {

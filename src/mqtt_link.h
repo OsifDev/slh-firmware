@@ -53,6 +53,7 @@ inline void mqLoop() {
     lastTry = millis();
     String cid = mqDeviceId() + "_" + String(random(10000));
     if (mq.connect(cid.c_str())) {
+      Serial.println("[MQTT] connecting...");
       mq.subscribe((mqBase + "/command").c_str());
       mq.publish((mqBase + "/response").c_str(), "online");
       Serial.println("[MQTT] connected: " + mqBase);

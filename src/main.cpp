@@ -1194,7 +1194,7 @@ void setup() {
 
 void loop() {
     server.handleClient();
-    pollServer();
+    // pollServer();  disabled - endpoint does not exist, blocked the loop
     uint16_t tx, ty;
     {
         uint16_t tx, ty;

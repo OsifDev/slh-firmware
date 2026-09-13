@@ -1,0 +1,33 @@
+#include <Arduino.h>
+#include <TFT_eSPI.h>
+TFT_eSPI tft = TFT_eSPI();
+uint16_t cal[5];
+void setup() {
+  Serial.begin(115200);
+  delay(1500);
+  pinMode(TFT_BL, OUTPUT);
+  digitalWrite(TFT_BL, HIGH);
+  tft.init();
+  tft.setRotation(1);
+  tft.fillScreen(TFT_BLACK);
+  tft.setTextColor(TFT_CYAN, TFT_BLACK);
+  tft.setTextDatum(MC_DATUM);
+  tft.drawString("TFT_eSPI TOUCH TEST", 160, 60, 4);
+  tft.drawString("tap the corner arrows", 160, 100, 2);
+  tft.setTextDatum(TL_DATUM);
+  delay(2000);
+  tft.calibrateTouch(cal, TFT_MAGENTA, TFT_BLACK, 15);
+  Serial.print("CAL: ");
+  for (int i=0;i<5;i++){ Serial.print(cal[i]); Serial.print(i<4?", ":"\n"); }
+  tft.setTouch(cal);
+  tft.fillScreen(TFT_BLACK);
+  tft.drawString("draw on screen", 10, 10, 2);
+}
+void loop() {
+  uint16_t x, y;
+  if (tft.getTouch(&x, &y)) {
+    tft.fillCircle(x, y, 4, TFT_GREEN);
+    Serial.printf("touch %d,%d\n", x, y);
+  }
+  delay(20);
+}
