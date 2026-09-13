@@ -124,7 +124,6 @@ String httpGet(const char* url, uint16_t timeoutMs = 8000) {
     http.setTimeout(timeoutMs);
     http.setConnectTimeout(timeoutMs);
     if (!http.begin(client, url)) return "";
-  http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
     int code = http.GET();
     String body = "";
     if (code == HTTP_CODE_OK) body = http.getString();
@@ -286,8 +285,6 @@ void drawAll() {
 WiFiClient   mqNet;
 PubSubClient mq(mqNet);
 String       mqBase = "";
-String g_otaUrl = "";
-bool   g_otaPending = false;
 
 bool fetchCoinGecko() {
     String url = "https://api.coingecko.com/api/v3/simple/price?ids=";
@@ -1108,112 +1105,6 @@ void refreshPrices() {
     drawCurrentScreen();
 }
 
-void mqRunOta(const String& url) {
-  Serial.println("[OTA] GET " + url);
-  HTTPClient http;
-  WiFiClient plain;
-  WiFiClientSecure sec;
-  if (url.startsWith("https://")) { sec.setInsecure(); http.begin(sec, url); }
-  else                             { http.begin(plain, url); }
-  http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
-  int code = http.GET();
-  if (code != 200) { Serial.printf("[OTA] http %d\n", code); http.end(); return; }
-  int len = http.getSize();
-  Serial.printf("[OTA] size %d\n", len);
-  tft.fillScreen(C_BG);
-  tft.setTextDatum(MC_DATUM);
-  tft.setTextColor(C_ACCENT, C_BG);
-  tft.drawString("OTA UPDATE", 160, 112, 4);
-  tft.setTextColor(C_DIM, C_BG);
-  tft.drawString("do not power off", 160, 136, 2);
-  tft.drawRoundRect(38, 156, 244, 22, 4, C_ACCENT_D);
-  tft.setTextDatum(TL_DATUM);
-  if (!Update.begin(len > 0 ? len : UPDATE_SIZE_UNKNOWN)) { Update.printError(Serial); http.end(); return; }
-  WiFiClient* stream = http.getStreamPtr();
-  uint8_t buf[1024];
-  int last = -1;
-  size_t total = 0;
-  unsigned long lastData = millis();
-  while (http.connected() && (len <= 0 || total < (size_t)len)) {
-    size_t avail = stream->available();
-    if (avail) {
-      int n = stream->readBytes(buf, avail > sizeof(buf) ? sizeof(buf) : avail);
-      if (n > 0) {
-        Update.write(buf, n); total += n; lastData = millis();
-        if (len > 0) {
-          int pct = (total * 100) / len;
-          if (pct != last) {
-            last = pct;
-            int w = (240 * pct) / 100;
-            uint16_t bar = (pct < 50) ? C_ACCENT : ((pct < 90) ? C_GOLD : C_UP);
-            tft.fillRect(40, 158, w, 18, bar);
-            tft.fillRect(40 + w, 158, 240 - w, 18, C_PANEL);
-            tft.fillRect(110, 186, 100, 24, C_BG);
-            tft.setTextDatum(MC_DATUM);
-            tft.setTextColor(bar, C_BG);
-            tft.drawString(String(pct) + "%", 160, 198, 4);
-            tft.setTextDatum(TL_DATUM);
-          }
-        }
-      }
-    } else {
-      delay(10);
-      if (millis() - lastData > 15000) { Serial.println("[OTA] timeout"); http.end(); return; }
-    }
-  }
-  http.end();
-  if (Update.end(true)) {
-    Serial.printf("[OTA] done: %u\n", (unsigned)total);
-    tft.fillScreen(C_BG);
-    drawLogo(160, 90, 34, C_UP);
-    delay(1200);
-    ESP.restart();
-  } else {
-    Update.printError(Serial);
-  }
-}
-
-void mqApply(const String& cmd) {
-  if (cmd == "ping") { mqReply("pong " + WiFi.localIP().toString()); return; }
-  if (cmd == "status") {
-    const char* sn = "?";
-    switch (g_currentScreen) {
-      case SCR_PRICES: sn = "prices"; break;
-      case SCR_MARKET: sn = "market"; break;
-      case SCR_SETUP:  sn = "setup";  break;
-      case SCR_SHOW:   sn = "show";   break;
-      case SCR_HOME:   sn = "home";   break;
-      case SCR_LESSON: sn = "lesson"; break;
-    }
-    String s = "screen="; s += sn;
-    s += " up=" + String(millis()/1000) + "s heap=" + String(ESP.getFreeHeap());
-    mqReply(s); return;
-  }
-  if (cmd == "refresh") { lastRefresh = 0; mqReply("refreshing"); return; }
-  if (cmd.startsWith("screen ")) {
-    String t = cmd.substring(7); t.trim();
-    ScreenId to = g_currentScreen;
-    if      (t == "home")   to = SCR_HOME;
-    else if (t == "prices") to = SCR_PRICES;
-    else if (t == "market") to = SCR_MARKET;
-    else if (t == "setup")  to = SCR_SETUP;
-    else if (t == "show")   to = SCR_SHOW;
-    else if (t == "lesson") to = SCR_LESSON;
-    else { mqReply("unknown screen: " + t); return; }
-    g_currentScreen = to; firstDraw = true;
-    drawCurrentScreen();
-    mqReply("screen=" + t);
-    return;
-  }
-  if (cmd.startsWith("ota ")) {
-    g_otaUrl = cmd.substring(4); g_otaUrl.trim();
-    if (g_otaUrl.length() == 0) { mqReply("ota: missing url"); return; }
-    mqReply("ota: queued");
-    g_otaPending = true;
-    return;
-  }
-  mqReply("unknown cmd: " + cmd);
-}
 void setup() {
     Serial.begin(115200);
     delay(300);
@@ -1263,14 +1154,11 @@ void setup() {
     drawStatus(WiFi.localIP().toString(), C_UP);
     delay(900);
     g_lastActivity = millis();
-    mqBegin();
     setupServer();
     refreshPrices();
 }
 
 void loop() {
-    if (g_otaPending) { g_otaPending = false; mqRunOta(g_otaUrl); }
-    mqLoop();
     server.handleClient();
     pollServer();
     uint16_t tx, ty;
