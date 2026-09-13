@@ -276,6 +276,7 @@ void drawAll() {
 #define OWNER_NAME "OSIF"
 #define OWNER_NAME "OSIF"
 #include "screens.h"
+#include "clock.h"
 #include "navbar.h"
 #include "poll.h"
 
@@ -1192,6 +1193,7 @@ void setup() {
     g_lastActivity = millis();
     setupServer();
     mqBegin();
+    clockBegin();
     refreshPrices();
 }
 

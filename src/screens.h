@@ -1,3 +1,4 @@
+#include "clock.h"
 #ifndef OWNER_NAME
 #define OWNER_NAME "SLH"
 #endif
@@ -46,6 +47,8 @@ static void drawScreenBar(ScreenId s, const char* name) {
     tft.setTextDatum(MR_DATUM);
     tft.setTextColor(C_GOLD, C_PANEL);
     tft.drawString(OWNER_NAME, 314, 17, 2);
+    tft.setTextColor(C_TEXT, C_PANEL);
+    tft.drawString(clockTime(), 250, 17, 2);
     tft.setTextDatum(ML_DATUM);
     tft.setTextColor(C_DIM, C_PANEL);
     tft.drawString(name, 96, 17, 2);

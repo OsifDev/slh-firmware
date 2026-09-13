@@ -27,7 +27,7 @@ void drawNavBar(int pressed = -1) {
 
 // returns 0=back 1=home 2=next  -1=not on navbar
 int navHit(int tx, int ty) {
-    if (ty < NAV_TOP - 25) return -1;
+    if (ty < NAV_TOP - 60) return -1;
     if (tx < NAV_BTN_W) return 0;
     if (tx < NAV_BTN_W * 2) return 1;
     return 2;
