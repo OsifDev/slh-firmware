@@ -794,6 +794,9 @@ void setupServer() {
             }
             server.handleClient();
     mqLoop();
+    { static unsigned long tdbg=0; uint16_t _x,_y,_z;
+      if (millis()-tdbg>250 && rtRaw(&_x,&_y,&_z)) { tdbg=millis();
+        Serial.printf("[T] raw x=%u y=%u z=%u\n", _x, _y, _z); } }
     if (g_mqPending.length()) { String c = g_mqPending; g_mqPending = ""; mqApply(c); }
             delay(20);
         }
@@ -1148,7 +1151,7 @@ void setup() {
     tft.init();
     tft.setRotation(1);
     tft.setSwapBytes(true);
-    tft.setTouch(touchCal);
+    // tft.setTouch(touchCal);  removed - conflicts with rtBegin on the same XPT2046
     rtBegin();
 
     // hold a finger on the screen during boot to recalibrate
