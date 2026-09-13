@@ -791,6 +791,7 @@ void setupServer() {
                 tft.drawString("x=" + String(px) + " y=" + String(py) + " n=" + String(hits), 8, 40, 2);
             }
             server.handleClient();
+    mqLoop();
             delay(20);
         }
         firstDraw = true;
@@ -1155,6 +1156,7 @@ void setup() {
     delay(900);
     g_lastActivity = millis();
     setupServer();
+    mqBegin();
     refreshPrices();
 }
 
